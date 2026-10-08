@@ -1,0 +1,23 @@
+{
+  "name": "Dated — Places worth your time",
+  "short_name": "Dated",
+  "description": "Discover places and keep your outings together.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8f9f5",
+  "theme_color": "#214d3d",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "results": [
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 1000,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "laptop",
+      "width": 1280,
+      "height": 720,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "tablet",
+      "width": 820,
+      "height": 1180,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile",
+      "width": 390,
+      "height": 844,
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "filter-dialog",
+      "violations": []
+    }
+  ],
+  "errors": [],
+  "offline": true
+}

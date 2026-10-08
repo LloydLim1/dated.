@@ -1,0 +1,15 @@
+node_modules/
+.npm-cache/
+.data-test/
+.data-backup-test/
+.next/
+.next-test/
+.data/
+.env*
+!.env.example
+test-results/
+playwright-report/
+*.tsbuildinfo
+next-env.d.ts
+tmp/
+.backups/
