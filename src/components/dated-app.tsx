@@ -3185,6 +3185,18 @@ function PlaceDetail({
                 <p>
                   {p.priceText || "Prices aren’t published in our sources yet."}
                 </p>
+                {p.priceText && p.priceCheckedAt && (
+                  <small>
+                    Published price checked on{" "}
+                    {new Date(p.priceCheckedAt).toLocaleDateString("en-PH", {
+                      timeZone: "Asia/Manila",
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                    .
+                  </small>
+                )}
                 <small>
                   {p.menuUrl
                     ? p.menuStatus === "unavailable"

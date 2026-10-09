@@ -13,6 +13,9 @@ import official from "./official-brand-sources.json" with { type: "json" };
 import { philippineMenu, philippineWebsite } from "./philippine-menus.mjs";
 
 export const WEEK = 7 * 86400000;
+const DAY = 86400000;
+const METRO_MANILA_RELATION_ID = 147488;
+const AREA_RELATION_OFFSET = 3600000000;
 export const CITIES = {
   103703: "Manila",
   103716: "Makati",
@@ -259,6 +262,12 @@ const officialMenus = {
   Q37158: "https://www.starbucks.ph/menu",
   Q37614: "https://www.jollibee.com.ph/menu/",
 };
+export function metroOverpassQuery() {
+  const cityRelations = Object.keys(CITIES)
+    .map((id) => `relation(${id});`)
+    .join("");
+  return `[out:json][timeout:60];area(${AREA_RELATION_OFFSET + METRO_MANILA_RELATION_ID})->.metro;relation(${METRO_MANILA_RELATION_ID});out tags;nwr["amenity"~"^(restaurant|cafe|fast_food|food_court)$"](area.metro);out center tags;(${cityRelations});out geom;`;
+}
 export function normalizePlace(
   e,
   { index = new Map(), cities = [], now = Date.now() } = {},
@@ -424,9 +433,12 @@ export function importPlaces(
       // A nearby lookup must retain region membership and previously verified brand assets.
       const sameBrand =
         previous?.brandId === place.brandId && previous?.name === place.name;
-      const previousMenu = !authoritative
-        ? philippineMenu(previous?.menuUrl)
-        : undefined;
+      const previousMenu =
+        !authoritative ||
+        (previous?.menuUrl === place.menuUrl &&
+          ["restricted", "unavailable"].includes(place.menuStatus))
+          ? philippineMenu(previous?.menuUrl)
+          : undefined;
       const merged = {
         ...place,
         logo:
@@ -446,6 +458,9 @@ export function importPlaces(
           (previousMenu ? previous?.menuCheckedAt : undefined),
         priceText:
           place.priceText || (previousMenu ? previous?.priceText : undefined),
+        priceCheckedAt:
+          place.priceCheckedAt ||
+          (previousMenu ? previous?.priceCheckedAt : undefined),
         priceSource:
           place.priceSource ||
           (previousMenu ? previous?.priceSource : undefined),
@@ -591,7 +606,12 @@ export async function enrichLogos(
   db,
   dataDir,
   places,
-  { fetcher = fetch, now = Date.now(), progress = () => {} } = {},
+  {
+    fetcher = fetch,
+    now = Date.now(),
+    progress = () => {},
+    force = false,
+  } = {},
 ) {
   initializeCatalog(db);
   mkdirSync(resolve(dataDir, "logos"), { recursive: true });
@@ -607,6 +627,7 @@ export async function enrichLogos(
       asset = saved ? JSON.parse(saved.data) : null;
     if (asset) assets.set(id, asset);
     if (
+      force ||
       !asset ||
       asset.checkedAt < now - WEEK ||
       (asset.logo && !existsSync(resolve(dataDir, "logos", asset.file)))
@@ -807,13 +828,11 @@ export async function syncMetro(
   try {
     let payload = source;
     if (!payload) {
-      const query =
-        '[out:json][timeout:60];area["ISO3166-2"="PH-00"]->.metro;.metro out tags;nwr["amenity"~"^(restaurant|cafe|fast_food|food_court)$"](area.metro);out center tags;rel(area.metro)["boundary"="administrative"]["admin_level"="6"];out geom;';
       const endpoint = new URL(
         process.env.DATED_OVERPASS_URL ||
           "https://overpass-api.de/api/interpreter",
       );
-      endpoint.searchParams.set("data", query);
+      endpoint.searchParams.set("data", metroOverpassQuery());
       payload = await fetchJson(endpoint, fetcher, 150000);
     }
     if (
@@ -862,10 +881,11 @@ export async function syncMetro(
       fetcher,
       now,
       progress,
+      force,
     });
     if (process.env.DATED_SITE_LOGOS !== "false")
-      await enrichWebsiteLogos(db, dataDir, places, { now, progress });
-    await enrichMenus(db, places, { now, progress });
+      await enrichWebsiteLogos(db, dataDir, places, { now, progress, force });
+    await enrichMenus(db, places, { now, progress, force });
     const changes = importPlaces(db, places, now, true);
     const availability = reconcileMissingPlaces(db, places, now);
     const result = {
@@ -875,6 +895,8 @@ export async function syncMetro(
       lastAttempt: now,
       lastSuccess: now,
       nextDue: now + WEEK,
+      enrichmentCheckedAt: now,
+      enrichmentNextDue: now + WEEK,
       logos: places.filter((p) => p.logo).length,
       menus: places.filter((p) => p.menuUrl).length,
       prices: places.filter((p) => p.priceText).length,
@@ -927,7 +949,7 @@ export async function syncMetro(
       status: "error",
       lastAttempt: now,
       error: e.message,
-      retryAfter: now + 3600000,
+      retryAfter: now + DAY,
     };
     saveStatus(db, failed);
     throw e;
@@ -938,7 +960,12 @@ export async function enrichWebsiteLogos(
   db,
   dataDir,
   places,
-  { now = Date.now(), progress = () => {}, reader = publicResource } = {},
+  {
+    now = Date.now(),
+    progress = () => {},
+    reader = publicResource,
+    force = false,
+  } = {},
 ) {
   initializeCatalog(db);
   mkdirSync(resolve(dataDir, "logos"), { recursive: true });
@@ -972,6 +999,7 @@ export async function enrichWebsiteLogos(
       if (
         cached?.identityValidated &&
         cached.extractorVersion === 8 &&
+        !force &&
         cached.checkedAt > now - WEEK &&
         (!cached.file || existsSync(resolve(dataDir, "logos", cached.file)))
       ) {
@@ -1088,7 +1116,12 @@ export async function enrichWebsiteLogos(
 export async function enrichMenus(
   db,
   places,
-  { now = Date.now(), progress = () => {}, reader = publicResource } = {},
+  {
+    now = Date.now(),
+    progress = () => {},
+    reader = publicResource,
+    force = false,
+  } = {},
 ) {
   initializeCatalog(db);
   const urls = [...new Set(places.map((p) => p.menuUrl).filter(Boolean))],
@@ -1105,6 +1138,7 @@ export async function enrichMenus(
         cached = saved ? JSON.parse(saved.data) : null;
       if (
         cached?.countryVerified === "PH" &&
+        !force &&
         cached?.checkedAt > now - WEEK &&
         (!/^(?:www\.)?pickup-coffee\.com$/.test(new URL(url).hostname) ||
           cached.priceParserVersion === 2)
@@ -1179,7 +1213,81 @@ export async function enrichMenus(
       if (result.priceText) {
         p.priceText = result.priceText;
         p.priceSource = p.menuUrl;
+        p.priceCheckedAt = result.checkedAt;
+      } else if (result.status === "reachable" && p.priceSource === p.menuUrl) {
+        p.priceText = undefined;
+        p.priceSource = undefined;
+        p.priceCheckedAt = undefined;
       }
     }
   }
+}
+
+export async function refreshMetroEnrichment(
+  db,
+  dataDir,
+  {
+    force = false,
+    fetcher = fetch,
+    now = Date.now(),
+    progress = () => {},
+    reader = publicResource,
+  } = {},
+) {
+  initializeCatalog(db);
+  const prior = catalogStatus(db);
+  if (!force && prior.enrichmentNextDue > now && prior.enrichmentCheckedAt)
+    return { ...prior.enrichment, skipped: "not_due" };
+
+  const places = db
+    .prepare("SELECT data FROM places")
+    .all()
+    .map((row) => JSON.parse(row.data))
+    .filter(
+      (place) =>
+        !place.sample &&
+        place.catalogRegion === "Metro Manila" &&
+        ["Restaurant", "Café"].includes(place.category),
+    );
+  if (!places.length)
+    throw new Error(
+      "No saved Metro Manila food listings are available to refresh.",
+    );
+
+  const logos = await enrichLogos(db, dataDir, places, {
+    fetcher,
+    now,
+    progress,
+    force,
+  });
+  if (process.env.DATED_SITE_LOGOS !== "false")
+    await enrichWebsiteLogos(db, dataDir, places, {
+      now,
+      progress,
+      reader,
+      force,
+    });
+  await enrichMenus(db, places, { now, progress, reader, force });
+  const changes = importPlaces(db, places, now, true);
+  const result = {
+    checkedAt: now,
+    nextDue: now + WEEK,
+    count: places.length,
+    logos: places.filter((place) => place.logo).length,
+    menus: places.filter((place) => place.menuUrl).length,
+    prices: places.filter((place) => place.priceText).length,
+    changed: changes.changed,
+    ...logos,
+  };
+  saveStatus(db, {
+    ...prior,
+    enrichmentCheckedAt: now,
+    enrichmentNextDue: now + WEEK,
+    enrichment: result,
+  });
+  writeFileSync(
+    resolve(dataDir, "enrichment-audit.json"),
+    JSON.stringify(result, null, 2),
+  );
+  return result;
 }

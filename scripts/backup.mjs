@@ -25,6 +25,7 @@ for (const item of [
   "museum-cache.json",
   "museum-audit.json",
   "cinema-audit.json",
+  "enrichment-audit.json",
 ]) {
   if (existsSync(resolve(source, item)))
     cpSync(resolve(source, item), resolve(target, item), { recursive: true });

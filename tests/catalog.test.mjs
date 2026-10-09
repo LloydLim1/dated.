@@ -7,6 +7,7 @@ import sharp from "sharp";
 import {
   CITIES,
   WEEK,
+  metroOverpassQuery,
   initializeCatalog,
   catalogStatus,
   normalizePlace,
@@ -17,6 +18,7 @@ import {
   reconcileMissingPlaces,
   enrichGuideReferences,
   syncMetro,
+  refreshMetroEnrichment,
   enrichLogos,
   enrichMenus,
   enrichWebsiteLogos,
@@ -72,6 +74,14 @@ function snapshot() {
   });
   return { elements };
 }
+test("full-region refresh queries the Metro Manila area and its 17 known city boundaries directly", () => {
+  const query = metroOverpassQuery();
+  assert.match(query, /area\(3600147488\)->\.metro/);
+  assert.match(query, /relation\(147488\);out tags/);
+  assert.match(query, /amenity.*restaurant\|cafe\|fast_food\|food_court/);
+  assert.equal((query.match(/relation\(\d+\);/g) || []).length, 18);
+  assert.doesNotMatch(query, /rel\(area\.metro\)/);
+});
 test("full scan validates and assigns all 17 cities before importing, then respects weekly due dates", async () => {
   const db = database(),
     dir = directory(),
@@ -212,6 +222,7 @@ test("weekly menu checks update explicit peso prices, record changes, and permit
   });
   await enrichMenus(db, places, { reader, now: 1000000000 });
   assert.equal(places[0].priceText, "Published items: ₱175");
+  assert.equal(places[0].priceCheckedAt, 1000000000);
   assert.equal(places[0].budgetKnown, false);
   assert.equal(places[0].menuStatus, "reachable");
   importPlaces(db, places, 1000000000, true);
@@ -220,14 +231,94 @@ test("weekly menu checks update explicit peso prices, record changes, and permit
     now: 1000000000 + WEEK + 1,
   });
   assert.equal(places[0].menuStatus, "restricted");
-  const fresh = { ...places[0], priceText: undefined, priceSource: undefined };
-  importPlaces(db, [fresh], 1000000000 + WEEK + 1, true);
+  assert.equal(places[0].priceText, "Published items: ₱175");
+  importPlaces(db, places, 1000000000 + WEEK + 1, true);
+  await enrichMenus(db, places, {
+    reader: async () => ({
+      status: 200,
+      headers: { "content-type": "text/html" },
+      bytes: Buffer.from("<html><body>Menu available</body></html>"),
+    }),
+    now: 1000000000 + WEEK + 2,
+    force: true,
+  });
+  assert.equal(places[0].menuStatus, "reachable");
+  assert.equal(places[0].priceText, undefined);
+  importPlaces(db, places, 1000000000 + WEEK + 2, true);
   assert.ok(
     db
       .prepare("SELECT fields FROM place_changes")
       .all()
       .some((r) => JSON.parse(r.fields).includes("priceText")),
   );
+  db.close();
+});
+test("saved-listing enrichment refreshes menus without an OSM scan and preserves ratings", async () => {
+  const db = database(),
+    dir = directory(),
+    url = "https://menu.cafeoasis.ph/",
+    place = {
+      ...normalizePlace({
+        type: "node",
+        id: 75,
+        lat: 14.5,
+        lon: 121,
+        tags: {
+          amenity: "restaurant",
+          name: "Cafe Oasis",
+          "website:menu": url,
+        },
+      }),
+      catalogRegion: "Metro Manila",
+      rating: 4.6,
+      reviewCount: 3,
+      priceText: "Published items: ₱175",
+      priceSource: url,
+      priceCheckedAt: 1000000000,
+      menuStatus: "reachable",
+    };
+  db.prepare("INSERT INTO places VALUES(?,?)").run(
+    place.id,
+    JSON.stringify(place),
+  );
+  db.prepare("INSERT INTO catalog_state VALUES(1,?)").run(
+    JSON.stringify({ status: "error", lastSuccess: 900000000, nextDue: 1 }),
+  );
+  const reader = async () => ({
+    status: 200,
+    headers: { "content-type": "text/html" },
+    bytes: Buffer.from(
+      '<script type="application/ld+json">{"offers":{"priceCurrency":"PHP","price":"250"}}</script>',
+    ),
+  });
+  const refreshed = await refreshMetroEnrichment(db, dir, {
+    force: true,
+    reader,
+    now: 1000000000 + WEEK,
+  });
+  assert.equal(refreshed.count, 1);
+  const saved = JSON.parse(
+    db.prepare("SELECT data FROM places WHERE id=?").get(place.id).data,
+  );
+  assert.equal(saved.priceText, "Published items: ₱250");
+  assert.equal(saved.priceCheckedAt, 1000000000 + WEEK);
+  assert.equal(saved.rating, 4.6);
+  assert.equal(saved.reviewCount, 3);
+  assert.equal(catalogStatus(db).lastSuccess, 900000000);
+  let forcedChecks = 0;
+  await refreshMetroEnrichment(db, dir, {
+    force: false,
+    now: 1000000000 + WEEK + 1,
+    reader: async () => {
+      forcedChecks++;
+      return {
+        status: 200,
+        headers: { "content-type": "text/html" },
+        bytes: Buffer.from("<html>"),
+      };
+    },
+  });
+  assert.equal(forcedChecks, 0);
   db.close();
 });
 test("public sources reject private addresses, unsafe links, photos pretending to be logos, and dollar prices", () => {

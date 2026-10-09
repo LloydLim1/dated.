@@ -69,6 +69,7 @@ export type Place = {
   menuCheckedAt?: number;
   priceText?: string;
   priceSource?: string;
+  priceCheckedAt?: number;
   checkedAt?: number;
   mapStatus?: "confirmed" | "unconfirmed";
   missingSince?: number;

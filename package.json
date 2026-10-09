@@ -11,6 +11,7 @@
     "test": "playwright test",
     "admin": "node scripts/admin.mjs",
     "places:sync": "node scripts/sync-places.mjs",
+    "places:enrich": "node scripts/enrich-places.mjs",
     "museums:sync": "node scripts/sync-museums.mjs",
     "cinemas:sync": "node scripts/sync-cinemas.mjs",
     "test:catalog": "node --test tests/catalog.test.mjs tests/museums-menus.test.mjs tests/map-hierarchy.test.mjs tests/review-credibility.test.mjs tests/philippine-date.test.mjs"

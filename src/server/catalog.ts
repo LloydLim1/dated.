@@ -1,15 +1,37 @@
 import "server-only";
 import { db, dataDir } from "./db";
-import { catalogStatus, syncMetro } from "@/lib/place-catalog.mjs";
+import {
+  catalogStatus,
+  refreshMetroEnrichment,
+  syncMetro,
+} from "@/lib/place-catalog.mjs";
 import { syncMuseums } from "@/lib/museum-catalog.mjs";
 import { syncCinemas } from "@/lib/cinema-catalog.mjs";
 
 let active: Promise<unknown> | undefined;
 export function refreshCatalog(force = false) {
   if (!active) {
-    active = syncMetro(db, dataDir, { force }).finally(() => {
-      active = undefined;
-    });
+    active = syncMetro(db, dataDir, { force })
+      .catch(async (error) => {
+        try {
+          const enrichment = await refreshMetroEnrichment(db, dataDir, {
+            force,
+          });
+          console.info(
+            "Saved restaurant listings received an enrichment refresh:",
+            JSON.stringify(enrichment),
+          );
+        } catch (fallbackError) {
+          console.error(
+            "Saved restaurant enrichment refresh failed:",
+            (fallbackError as Error).message,
+          );
+        }
+        throw error;
+      })
+      .finally(() => {
+        active = undefined;
+      });
   }
   return active;
 }
