@@ -1,8 +1,8 @@
 {
-  "checkedAt": "2026-10-09T15:17:30.250Z",
+  "checkedAt": "2026-10-09T17:18:56.230Z",
   "foodPlaces": 11865,
-  "verifiedLogos": 3489,
-  "missingLogos": 8376,
+  "verifiedLogos": 3548,
+  "missingLogos": 8317,
   "confirmedPhilippineMenuLinks": 1339,
   "menuStatuses": {
     "reachable": 1285,
@@ -12,5 +12,5 @@
   "publishedPriceListings": 92,
   "coverageComplete": false,
   "sourceTimestamp": "2026-10-09T09:51:29Z",
-  "logoCheckedAt": "2026-10-09T16:18:55.648Z"
+  "logoCheckedAt": "2026-10-09T17:18:56.230Z"
 }

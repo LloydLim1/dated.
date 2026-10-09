@@ -699,6 +699,18 @@ test("Philippine operator pages are selected for missing logos without exposing 
     );
   }
 });
+test("Popeyes and Chatime logos use first-party Philippine sources without adding menu links", () => {
+  const sources = [
+    ["Q1330910", "https://www.popeyes.ph/"],
+    ["Q16829306", "https://chatime.com.ph/"],
+  ];
+  for (const [brandId, logoWebsite] of sources) {
+    const source = officialSource({ brandId, category: "Restaurant" });
+    assert.equal(source.logoWebsite, logoWebsite);
+    assert.equal(source.menu, undefined);
+    assert.equal(source.website, undefined);
+  }
+});
 
 test("verified official logo caches repopulate every exact-brand branch on later refreshes", async () => {
   const db = database(),
