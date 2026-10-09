@@ -9,7 +9,11 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "playwright test",
-    "admin": "node scripts/admin.mjs"
+    "admin": "node scripts/admin.mjs",
+    "places:sync": "node scripts/sync-places.mjs",
+    "museums:sync": "node scripts/sync-museums.mjs",
+    "cinemas:sync": "node scripts/sync-cinemas.mjs",
+    "test:catalog": "node --test tests/catalog.test.mjs tests/museums-menus.test.mjs tests/map-hierarchy.test.mjs tests/review-credibility.test.mjs tests/philippine-date.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.577.0",

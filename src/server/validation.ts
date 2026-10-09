@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CRITERIA } from "@/lib/types";
+import { philippineDate } from "@/lib/philippine-date.mjs";
 export const visibility = z.enum(["public", "followers", "private"]);
 export const date = z
   .string()
@@ -41,15 +42,29 @@ export const reviewSchema = z.object({
     .min(20, "Tell us a little more (at least 20 characters).")
     .max(3000),
   visitDate: date.refine(
-    (v) => v <= new Date().toISOString().slice(0, 10),
+    (v) => v <= philippineDate(),
     "Reviews are for visits that have already happened.",
   ),
   ratings: z.record(z.string(), z.number().int().min(1).max(5)),
-  spending: z.number().int().min(0).max(100000),
+  spending: z.number().int().min(0).max(100000).nullable().optional().default(null),
   visibility,
   incentive: z.boolean(),
   media: z.array(z.string().uuid()).max(4),
   evidence: z.string().uuid().optional(),
+});
+export const postSchema = z.object({
+  placeId: z.string().min(1),
+  caption: z.string().trim().max(2200),
+  visitDate: date.refine(
+    (v) => v <= philippineDate(),
+    "Choose today or a past visit.",
+  ),
+  visibility,
+  media: z
+    .array(z.string().uuid())
+    .min(1, "Add at least one photo.")
+    .max(10)
+    .refine((v) => new Set(v).size === v.length, "Choose different photos."),
 });
 export const outingSchema = z.object({
   title: z.string().trim().min(3).max(100),

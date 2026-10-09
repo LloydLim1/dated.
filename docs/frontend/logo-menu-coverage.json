@@ -1,0 +1,16 @@
+{
+  "checkedAt": "2026-10-09T15:17:30.250Z",
+  "foodPlaces": 11865,
+  "verifiedLogos": 3489,
+  "missingLogos": 8376,
+  "confirmedPhilippineMenuLinks": 1339,
+  "menuStatuses": {
+    "reachable": 1285,
+    "unavailable": 53,
+    "restricted": 1
+  },
+  "publishedPriceListings": 92,
+  "coverageComplete": false,
+  "sourceTimestamp": "2026-10-09T09:51:29Z",
+  "logoCheckedAt": "2026-10-09T16:18:55.648Z"
+}

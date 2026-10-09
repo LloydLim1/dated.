@@ -1,0 +1,23 @@
+{
+  "result": [
+    {
+      "name": "Pickup Coffee",
+      "violations": [],
+      "overflow": false,
+      "logo": "/api/logos/73fb00d5256048fde44e16c8d5cb510be3cf5318c52efe74d6eff07244c1fdba"
+    },
+    {
+      "name": "Army Navy",
+      "violations": [],
+      "overflow": false,
+      "logo": "/api/logos/6a0849cc2d733a8d83965928f1b46da3eea53633de32187273a2b1601119c911"
+    },
+    {
+      "name": "Bo's Coffee",
+      "violations": [],
+      "overflow": false,
+      "logo": "/api/logos/29b32c26d6c2d2fc6f43cd326c7c5f9fd608320253e3923e5fa38830c9ac5c77"
+    }
+  ],
+  "errors": []
+}

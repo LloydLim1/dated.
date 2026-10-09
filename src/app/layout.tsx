@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   description:
     "Find your next favorite place. Save little discoveries, plan outings, and share thoughtful experiences around Metro Manila.",
   manifest: "/manifest.webmanifest",
+  icons: { icon: "/icon.svg", apple: "/icon-192.png" },
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Dated" },
 };
 export const viewport: Viewport = {

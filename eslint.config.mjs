@@ -20,6 +20,9 @@ export default defineConfig([
         self: "readonly",
         caches: "readonly",
         fetch: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        AbortSignal: "readonly",
       },
     },
   },
@@ -30,5 +33,6 @@ export default defineConfig([
     "test-results/**",
     "playwright-report/**",
     "next-env.d.ts",
+    "tmp/**",
   ]),
 ]);

@@ -1,0 +1,71 @@
+{
+  "report": [
+    {
+      "name": "Hap Chan",
+      "count": 27,
+      "logos": 27,
+      "menu": "https://www.hapchan.com.ph/menu-chineseclassic.html",
+      "price": "Published items: ₱298–₱1288",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Tapa King",
+      "count": 23,
+      "logos": 23,
+      "menu": "https://tapaking.com.ph/our-food",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "North Park",
+      "count": 24,
+      "logos": 24,
+      "menu": "https://www.northpark.com.ph/menu",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Angel's Pizza",
+      "count": 22,
+      "logos": 22,
+      "menu": "https://www.angelspizza.com.ph/menu",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Gerry's Grill",
+      "count": 22,
+      "logos": 22,
+      "menu": "https://www.gerrysgrill.com/PH#menu",
+      "price": "Published items: ₱28–₱3835",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Serenitea",
+      "count": 17,
+      "logos": 17,
+      "menu": "https://iloveserenitea.com/menu/",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Turks",
+      "count": 19,
+      "logos": 19,
+      "menu": "https://www.turks.ph/our-menu/",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "24 Chicken",
+      "count": 17,
+      "logos": 17,
+      "menu": "https://24chicken.com/our-menu",
+      "violations": [],
+      "overflow": false
+    }
+  ],
+  "errors": []
+}

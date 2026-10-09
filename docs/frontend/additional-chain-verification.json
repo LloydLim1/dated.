@@ -1,0 +1,74 @@
+{
+  "report": [
+    {
+      "name": "Hen Lin",
+      "count": 17,
+      "logos": 17,
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Zagu",
+      "count": 15,
+      "logos": 15,
+      "menu": "https://zagushakes.com/menu/",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Master Siomai",
+      "count": 15,
+      "logos": 15,
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "MESA",
+      "count": 12,
+      "logos": 12,
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Manam",
+      "count": 13,
+      "logos": 13,
+      "menu": "https://manam.momentfood.com/",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Shawarma Shack",
+      "count": 21,
+      "logos": 21,
+      "menu": "https://shawarmashack.ph/our-menu.html",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Banapple",
+      "count": 10,
+      "logos": 10,
+      "menu": "https://banapple.ph/shop/",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Conti's",
+      "count": 10,
+      "logos": 10,
+      "menu": "https://www.contis.ph/pages/restaurant-menu",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "Kuya J",
+      "count": 13,
+      "logos": 13,
+      "menu": "https://kuyaj.ph/menu-gma/",
+      "violations": [],
+      "overflow": false
+    }
+  ],
+  "errors": []
+}

@@ -11,10 +11,12 @@ const globalDb = globalThis as unknown as { datedDb?: DatabaseSync };
 export const db =
   globalDb.datedDb ?? new DatabaseSync(resolve(dataDir, "dated.sqlite"));
 globalDb.datedDb = db;
+db.exec("PRAGMA busy_timeout=5000");
 db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
  CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY,email TEXT UNIQUE,username TEXT UNIQUE NOT NULL,name TEXT NOT NULL,password TEXT,bio TEXT DEFAULT '',city TEXT DEFAULT 'Metro Manila',avatar TEXT,role TEXT DEFAULT 'member',demo INTEGER DEFAULT 0,created_at INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS places(id TEXT PRIMARY KEY,data TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS discovery_searches(key TEXT PRIMARY KEY,place_ids TEXT NOT NULL,created_at INTEGER NOT NULL,truncated INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY,author_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,place_id TEXT NOT NULL REFERENCES places(id),title TEXT NOT NULL,body TEXT NOT NULL,visit_date TEXT NOT NULL,ratings TEXT NOT NULL,spending INTEGER NOT NULL,visibility TEXT NOT NULL CHECK(visibility IN ('public','followers','private')),incentive INTEGER DEFAULT 0,supported INTEGER DEFAULT 0,hidden INTEGER DEFAULT 0,demo INTEGER DEFAULT 0,created_at INTEGER NOT NULL,UNIQUE(author_id,place_id,visit_date));
  CREATE TABLE IF NOT EXISTS follows(follower TEXT REFERENCES users(id) ON DELETE CASCADE,following TEXT REFERENCES users(id) ON DELETE CASCADE,PRIMARY KEY(follower,following),CHECK(follower != following));
  CREATE TABLE IF NOT EXISTS collections(id TEXT PRIMARY KEY,owner_id TEXT REFERENCES users(id) ON DELETE CASCADE,name TEXT NOT NULL);
@@ -101,6 +103,28 @@ if (!db.prepare("SELECT id FROM places LIMIT 1").get()) {
   }
 }
 // Additive pilot migration; existing reviews and accounts remain intact.
+db.exec(`
+ CREATE TABLE IF NOT EXISTS posts(id TEXT PRIMARY KEY,author_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,place_id TEXT NOT NULL REFERENCES places(id),caption TEXT NOT NULL,visit_date TEXT NOT NULL,visibility TEXT NOT NULL CHECK(visibility IN ('public','followers','private')),created_at INTEGER NOT NULL);
+ CREATE TABLE IF NOT EXISTS post_reactions(post_id TEXT REFERENCES posts(id) ON DELETE CASCADE,user_id TEXT REFERENCES users(id) ON DELETE CASCADE,PRIMARY KEY(post_id,user_id));
+ CREATE TABLE IF NOT EXISTS post_comments(id TEXT PRIMARY KEY,post_id TEXT REFERENCES posts(id) ON DELETE CASCADE,author_id TEXT REFERENCES users(id) ON DELETE CASCADE,body TEXT NOT NULL,created_at INTEGER NOT NULL);
+ CREATE INDEX IF NOT EXISTS posts_author ON posts(author_id,created_at DESC);
+ CREATE INDEX IF NOT EXISTS posts_place ON posts(place_id,created_at DESC);
+`);
+if (
+  !(db.prepare("PRAGMA table_info(media)").all() as { name: string }[]).some(
+    (c) => c.name === "post_id",
+  )
+)
+  db.exec(
+    "ALTER TABLE media ADD COLUMN post_id TEXT REFERENCES posts(id) ON DELETE CASCADE",
+  );
+db.exec("CREATE INDEX IF NOT EXISTS media_post ON media(post_id)");
+if (
+  !(db.prepare("PRAGMA table_info(media)").all() as { name: string }[]).some(
+    (c) => c.name === "position",
+  )
+)
+  db.exec("ALTER TABLE media ADD COLUMN position INTEGER DEFAULT 0");
 if (
   !(db.prepare("PRAGMA table_info(reviews)").all() as { name: string }[]).some(
     (c) => c.name === "outing_id",
@@ -112,7 +136,18 @@ if (
 db.exec(
   "CREATE UNIQUE INDEX IF NOT EXISTS review_stop_unique ON reviews(author_id,outing_id,place_id) WHERE outing_id IS NOT NULL",
 );
+if (
+  !db
+    .prepare("PRAGMA table_info(reviews)")
+    .all()
+    .some((c) => c.name === "spending_known")
+) {
+  db.exec(
+    "ALTER TABLE reviews ADD COLUMN spending_known INTEGER NOT NULL DEFAULT 1",
+  );
+}
 export type Row = Record<string, string | number | null>;
+db.exec("CREATE TABLE IF NOT EXISTS itinerary_designs(outing_id TEXT PRIMARY KEY REFERENCES outings(id) ON DELETE CASCADE,settings TEXT NOT NULL,token TEXT UNIQUE,published TEXT,updated_at INTEGER NOT NULL)");
 export function rows(sql: string, ...params: (string | number | null)[]) {
   return db.prepare(sql).all(...params) as Row[];
 }

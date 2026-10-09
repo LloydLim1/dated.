@@ -1,12 +1,15 @@
-import { rows, row, type Row } from "./db";
+import { db, rows, row, type Row } from "./db";
 import { canSee, publicUser } from "./auth";
+import { catalogStatus } from "@/lib/place-catalog.mjs";
+import { reviewSummary } from "@/lib/review-credibility.mjs";
 import {
-  average,
   type User,
   type Review,
   type Place,
   type Outing,
   type Collection,
+  type Visibility,
+  type PhotoPost,
 } from "@/lib/types";
 export const userById = (id: string) => {
   const r = row("SELECT * FROM users WHERE id=?", id);
@@ -15,6 +18,36 @@ export const userById = (id: string) => {
 export const placeById = (id: string): Place | null => {
   const r = row("SELECT * FROM places WHERE id=?", id);
   return r ? JSON.parse(String(r.data)) : null;
+};
+const summarizeReviews = (all: Row[]) =>
+  reviewSummary(
+    all.map((r) => ({
+      id: String(r.id),
+      authorId: String(r.author_id),
+      visitDate: String(r.visit_date),
+      createdAt: Number(r.created_at),
+      ratings: JSON.parse(String(r.ratings)),
+      visibility: String(r.visibility),
+      hidden: !!r.hidden,
+      demo: !!r.demo,
+      incentive: !!r.incentive,
+      supported: !!r.supported,
+      outingId: r.outing_id ? String(r.outing_id) : undefined,
+    })),
+  );
+export const ratedPlaceById = (id: string): Place | null => {
+  const place = placeById(id);
+  return place
+    ? {
+        ...place,
+        ...summarizeReviews(
+          rows(
+            "SELECT * FROM reviews WHERE place_id=? AND visibility='public' AND hidden=0 AND demo=0",
+            id,
+          ),
+        ),
+      }
+    : null;
 };
 export function visibleReview(r: Row, me: User | null) {
   return (
@@ -31,7 +64,7 @@ export function serializeReview(r: Row, me: User | null): Review {
     body: String(r.body),
     visitDate: String(r.visit_date),
     ratings: JSON.parse(String(r.ratings)),
-    spending: Number(r.spending),
+    spending: r.spending_known === 0 ? null : Number(r.spending),
     visibility: r.visibility as Review["visibility"],
     incentive: !!r.incentive,
     supported: !!r.supported,
@@ -96,37 +129,64 @@ export function getFeed(me: User | null, placeId?: string) {
         : {}),
     }));
 }
+export function visiblePost(r: Row, me: User | null) {
+  return canSee(String(r.author_id), String(r.visibility), me);
+}
+export function getPosts(me: User | null): PhotoPost[] {
+  return rows("SELECT * FROM posts ORDER BY created_at DESC LIMIT 200")
+    .filter((p) => visiblePost(p, me))
+    .map((p) => ({
+      id: String(p.id),
+      author: userById(String(p.author_id))!,
+      placeId: String(p.place_id),
+      caption: String(p.caption),
+      visitDate: String(p.visit_date),
+      visibility: p.visibility as Visibility,
+      createdAt: Number(p.created_at),
+      media: rows(
+        "SELECT id FROM media WHERE post_id=? ORDER BY position,created_at,id",
+        String(p.id),
+      ).map((m) => String(m.id)),
+      likes: Number(
+        row(
+          "SELECT count(*) n FROM post_reactions WHERE post_id=?",
+          String(p.id),
+        )?.n || 0,
+      ),
+      liked:
+        !!me &&
+        !!row(
+          "SELECT 1 FROM post_reactions WHERE post_id=? AND user_id=?",
+          String(p.id),
+          me.id,
+        ),
+      comments: rows(
+        "SELECT * FROM post_comments WHERE post_id=? ORDER BY created_at LIMIT 100",
+        String(p.id),
+      ).map((c) => ({
+        id: String(c.id),
+        author: userById(String(c.author_id))!,
+        body: String(c.body),
+        createdAt: Number(c.created_at),
+      })),
+    }));
+}
 export function getPlaces(): Place[] {
+  const grouped = new Map<string, Row[]>();
+  for (const review of rows(
+    "SELECT * FROM reviews WHERE visibility='public' AND hidden=0 AND demo=0 ORDER BY created_at ASC",
+  )) {
+    const key = String(review.place_id);
+    const list = grouped.get(key) || [];
+    list.push(review);
+    grouped.set(key, list);
+  }
   return rows("SELECT data FROM places").map((r) => {
     const p: Place = JSON.parse(String(r.data));
-    const all = rows(
-      "SELECT * FROM reviews WHERE place_id=? AND visibility='public' AND hidden=0 AND demo=0 ORDER BY created_at ASC",
-      p.id,
-    );
-    const authorRatings = new Map<string, number>();
-    for (const review of all)
-      authorRatings.set(
-        String(review.author_id),
-        average(JSON.parse(String(review.ratings))),
-      );
-    const values = [...authorRatings.values()];
+    const all = grouped.get(p.id) || [];
     return {
       ...p,
-      rating: values.length
-        ? values.reduce((a, b) => a + b, 0) / values.length
-        : null,
-      reviewCount: all.length,
-      independentVisits: new Set(
-        all
-          .filter(
-            (r) =>
-              String(r.visit_date) >=
-              new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10),
-          )
-          .map(
-            (r) => r.outing_id || String(r.author_id) + String(r.visit_date),
-          ),
-      ).size,
+      ...summarizeReviews(all),
     };
   });
 }
@@ -189,7 +249,7 @@ export function getOutings(me: User | null): Outing[] {
 export function bootstrap(me: User | null) {
   const invitations = me
     ? rows(
-        "SELECT i.*,o.title,u.name FROM invitations i JOIN outings o ON o.id=i.outing_id JOIN users u ON u.id=o.owner_id WHERE i.user_id=? AND i.status!='declined'",
+        "SELECT i.*,o.title,o.date,o.notes,u.name FROM invitations i JOIN outings o ON o.id=i.outing_id JOIN users u ON u.id=o.owner_id WHERE i.user_id=? AND i.status!='declined'",
         me.id,
       ).map((r) => ({
         id: String(r.id),
@@ -197,12 +257,20 @@ export function bootstrap(me: User | null) {
         title: String(r.title),
         from: String(r.name),
         status: String(r.status),
+        visibility: r.visibility as Visibility,
+        date: String(r.date),
+        notes: String(r.notes),
+        stops: rows(
+          "SELECT place_id FROM outing_stops WHERE outing_id=? ORDER BY position",
+          String(r.outing_id),
+        ).map((s) => String(s.place_id)),
       }))
     : [];
   return {
     me,
     places: getPlaces(),
     feed: getFeed(me),
+    posts: getPosts(me),
     users: rows(
       "SELECT * FROM users ORDER BY demo DESC,created_at DESC LIMIT 100",
     ).map(publicUser),
@@ -216,5 +284,6 @@ export function bootstrap(me: User | null) {
     invitations,
     unread: invitations.filter((i) => i.status === "pending").length,
     mode: "local-pilot",
+    catalog: catalogStatus(db),
   };
 }

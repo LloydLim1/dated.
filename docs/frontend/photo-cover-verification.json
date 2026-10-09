@@ -1,0 +1,37 @@
+{
+  "verifiedAt": "2026-10-09T16:02:26.942Z",
+  "results": [
+    {
+      "name": "photo-cards-desktop",
+      "photo": {
+        "width": 364.65625,
+        "containerWidth": 364.65625,
+        "height": 220,
+        "objectFit": "cover",
+        "src": "/images/cafe.jpg",
+        "loaded": true
+      },
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "photo-cards-mobile",
+      "photo": {
+        "width": 354,
+        "containerWidth": 354,
+        "height": 240,
+        "objectFit": "cover",
+        "src": "/images/cafe.jpg",
+        "loaded": true
+      },
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "photo-place-detail-mobile",
+      "violations": [],
+      "overflow": false
+    }
+  ],
+  "errors": []
+}

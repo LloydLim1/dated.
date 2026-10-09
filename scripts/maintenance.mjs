@@ -4,9 +4,15 @@ import { readdirSync, unlinkSync } from "node:fs";
 const dir = resolve(process.env.DATED_DATA_DIR || ".data");
 const db = new DatabaseSync(resolve(dir, "dated.sqlite"));
 const now = Date.now();
+const hasPosts = db
+  .prepare("PRAGMA table_info(media)")
+  .all()
+  .some((column) => column.name === "post_id");
 const expired = db
   .prepare(
-    "SELECT id,file FROM media WHERE expires<? OR (review_id IS NULL AND created_at<?)",
+    "SELECT id,file FROM media WHERE expires<? OR (review_id IS NULL " +
+      (hasPosts ? "AND post_id IS NULL " : "") +
+      "AND created_at<?)",
   )
   .all(now, now - 86400000);
 for (const m of expired) {

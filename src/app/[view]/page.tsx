@@ -7,7 +7,7 @@ export default async function Page({
 }) {
   const { view } = await params;
   if (
-    !["explore", "map", "saved", "outings", "profile", "community"].includes(
+    !["explore", "map", "saved", "outings", "profile", "community", "premium"].includes(
       view,
     )
   )

@@ -1,0 +1,143 @@
+{
+  "count": 11865,
+  "museums": {
+    "status": "ready",
+    "count": 120,
+    "sourceEntries": 88,
+    "matched": 47,
+    "duplicates": 8,
+    "unlocated": [],
+    "aggregate": [
+      "National Museum of the Philippines Complex, National Museum of Fine Arts, National Museum of Anthropology,National Museums of Natural History"
+    ],
+    "logos": 10,
+    "admissions": 64,
+    "mapped": 99,
+    "addressOnly": 21,
+    "added": 0,
+    "changed": 1,
+    "lastAttempt": 1791553221948,
+    "lastSuccess": 1791553221948,
+    "nextDue": 1792158021948,
+    "sourceUrl": "https://philippinemuseums.com/museums/",
+    "unconfirmed": 0
+  },
+  "confirmedPhilippineMenus": 1339,
+  "cities": [
+    {
+      "name": "Manila",
+      "count": 1554
+    },
+    {
+      "name": "Makati",
+      "count": 1045
+    },
+    {
+      "name": "Quezon City",
+      "count": 3185
+    },
+    {
+      "name": "Pasay",
+      "count": 761
+    },
+    {
+      "name": "Parañaque",
+      "count": 789
+    },
+    {
+      "name": "Pateros",
+      "count": 23
+    },
+    {
+      "name": "Pasig",
+      "count": 694
+    },
+    {
+      "name": "Marikina",
+      "count": 522
+    },
+    {
+      "name": "Taguig",
+      "count": 788
+    },
+    {
+      "name": "Caloocan",
+      "count": 361
+    },
+    {
+      "name": "Valenzuela",
+      "count": 269
+    },
+    {
+      "name": "Navotas",
+      "count": 22
+    },
+    {
+      "name": "Malabon",
+      "count": 113
+    },
+    {
+      "name": "Muntinlupa",
+      "count": 410
+    },
+    {
+      "name": "Las Piñas",
+      "count": 460
+    },
+    {
+      "name": "Mandaluyong",
+      "count": 517
+    },
+    {
+      "name": "San Juan",
+      "count": 352
+    }
+  ],
+  "logoAssets": 174,
+  "unrelatedWebsiteHidden": true,
+  "failed": [],
+  "loadMs": 227,
+  "errors": [],
+  "results": [
+    {
+      "name": "metro-museum-desktop",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "metro-museum-address-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "metro-museum-closed-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "metro-map-desktop",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "metro-menu-mobile",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "metro-guide-desktop",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "metro-official-menu",
+      "violations": [],
+      "overflow": false
+    },
+    {
+      "name": "metro-unconfirmed-mobile",
+      "violations": [],
+      "overflow": false
+    }
+  ]
+}

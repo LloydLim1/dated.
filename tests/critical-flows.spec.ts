@@ -296,12 +296,18 @@ test("discovery, registration, save, and responsive browser journeys", async ({
     .getByLabel("Password", { exact: true })
     .fill("test-long-password-123");
   await dialog.getByLabel("I confirm I am 18 or older.").check();
+  await dialog
+    .getByRole("button", { name: "pilot terms", exact: true })
+    .click();
+  await expect(dialog.getByLabel("Your name", { exact: true })).toHaveValue(
+    "Browser Explorer",
+  );
+  await dialog
+    .getByRole("button", { name: "Close terms", exact: true })
+    .click();
   await dialog.locator("input[name=terms]").check();
   await dialog.getByRole("button", { name: "Make yourself at home" }).click();
-  await expect(dialog).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Save Paper Cup Studio", exact: true })
-    .click();
+  await expect(dialog).toContainText("Keep Paper Cup Studio in a collection.");
   await page.getByRole("button", { name: /Want to go 0 places/ }).click();
   await expect(page.getByRole("status")).toContainText("Saved to Want to go");
   await page.getByRole("button", { name: "Close dialog" }).click();
@@ -513,4 +519,259 @@ test("browser review and multi-stop outing journal", async ({ page }) => {
   await page.request.delete("/api/account", {
     data: { password: "test-long-password-123" },
   });
+});
+
+test("collection lifecycle, editable plans, deep links, and safe cancellation", async ({
+  page,
+}) => {
+  await account(page.request, "journeys");
+  await page.goto("/explore");
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  await page.getByLabel("Budget per person").selectOption("400");
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("heading", { name: "Casa Luna", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Explore Fern & Fable", exact: true })
+    .click();
+  await expect(page).toHaveURL(/place=fern-and-fable/);
+  await page.reload();
+  await expect(page.getByRole("dialog")).toContainText("Fern & Fable");
+  await page.getByRole("button", { name: "Save place", exact: true }).click();
+  await page.getByRole("button", { name: "Create a new collection" }).click();
+  await page.getByLabel("Collection name").fill("Weekend ideas");
+  await page
+    .getByRole("button", { name: "Create collection", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("Weekend ideas");
+  await expect(page.getByRole("status")).toContainText(
+    "Saved to Weekend ideas",
+  );
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await page
+    .locator(".sidebar")
+    .getByRole("button", { name: /Saved places/ })
+    .click();
+  await page.getByRole("button", { name: /Weekend ideas 1/ }).click();
+  await page.getByRole("button", { name: "Rename", exact: true }).click();
+  await page.getByLabel("Collection name").fill("Slow Saturdays");
+  await page.getByRole("button", { name: "Save collection name" }).click();
+  await expect(
+    page.getByRole("button", { name: /Slow Saturdays 1/ }),
+  ).toBeVisible();
+  await page.getByLabel("Search places").fill("does not exist");
+  await page
+    .getByRole("button", { name: "Clear filters", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Fern & Fable", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Explore Fern & Fable", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Add to an outing", exact: true })
+    .click();
+  await page.getByLabel("Give your day a name").fill("Our Saturday plan");
+  await page.getByLabel("When are we going?").fill("2026-10-02");
+  await page.getByRole("button", { name: "Create my outing" }).click();
+  await page.getByRole("button", { name: "Edit plan", exact: true }).click();
+  await expect(page.getByLabel("Give your day a name")).toHaveValue(
+    "Our Saturday plan",
+  );
+  await page.getByLabel("Give your day a name").fill("Draft that should stay");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toContainText("Leave without saving?");
+  await page.getByRole("button", { name: "Keep editing" }).click();
+  await expect(page.getByLabel("Give your day a name")).toHaveValue(
+    "Draft that should stay",
+  );
+  await page
+    .getByLabel("Give your day a name")
+    .fill("A coffee and culture day");
+  await page
+    .getByLabel("Add a place", { exact: true })
+    .selectOption("the-gallery");
+  await page.getByRole("button", { name: "Add stop", exact: true }).click();
+  await page.getByRole("button", { name: "Save changes to outing" }).click();
+  await expect(
+    page.getByRole("heading", { name: "A coffee and culture day" }),
+  ).toBeVisible();
+  await expect(page.locator(".outing-stops li")).toHaveCount(2);
+  await page.getByRole("button", { name: "Mark as visited" }).click();
+  await expect(page.getByRole("button", { name: /Visited 1/ })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page
+    .getByRole("button", { name: "Delete outing A coffee and culture day" })
+    .click();
+  await page.getByRole("button", { name: "Keep it" }).click();
+  await expect(
+    page.getByRole("heading", { name: "A coffee and culture day" }),
+  ).toBeVisible();
+  await page.goto("/explore");
+  await page
+    .getByRole("button", { name: "Explore Fern & Fable", exact: true })
+    .click();
+  await page.goBack();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.goForward();
+  await expect(page.getByRole("dialog")).toContainText("Fern & Fable");
+  await page.goto("/a-little-detour");
+  await expect(
+    page.getByRole("heading", { name: "This place isn’t on the map." }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "Explore places" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Where are we going?" }),
+  ).toBeVisible();
+  await page.request.delete("/api/account", {
+    data: { password: "test-long-password-123" },
+  });
+});
+
+test("plan edits preserve companion consent and enforce ownership", async ({
+  playwright,
+}) => {
+  const host = await playwright.request.newContext({
+    baseURL: "http://127.0.0.1:3100",
+  });
+  const companion = await playwright.request.newContext({
+    baseURL: "http://127.0.0.1:3100",
+  });
+  await account(host, "edithost");
+  const friend = await account(companion, "editfriend");
+  const plan = {
+    title: "A day for two",
+    date: "2026-10-02",
+    notes: "Meet after lunch.",
+    visibility: "private",
+    stops: ["fern-and-fable"],
+    invitees: [friend.username],
+  };
+  const id = (await (await host.post("/api/outings", { data: plan })).json())
+    .id;
+  const invitation = (await (await companion.get("/api/bootstrap")).json())
+    .invitations[0];
+  await companion.post("/api/invitations/" + invitation.id, {
+    data: { status: "accepted", visibility: "private" },
+  });
+  expect(
+    (await companion.patch("/api/outings/" + id, { data: plan })).status(),
+  ).toBe(404);
+  expect(
+    (
+      await host.patch("/api/outings/" + id, {
+        data: {
+          ...plan,
+          title: "An updated day for two",
+          stops: ["the-gallery", "fern-and-fable"],
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const updated = (
+    await (await host.get("/api/bootstrap")).json()
+  ).outings.find((o: { id: string }) => o.id === id);
+  expect(updated.stops).toEqual(["the-gallery", "fern-and-fable"]);
+  expect(updated.participants).toHaveLength(1);
+  expect(updated.participants[0]).toMatchObject({
+    status: "accepted",
+    visibility: "private",
+  });
+  const collection = (await (await host.get("/api/bootstrap")).json())
+    .collections[0];
+  expect(
+    (
+      await companion.patch("/api/collections/" + collection.id, {
+        data: { name: "Not mine" },
+      })
+    ).status(),
+  ).toBe(404);
+  expect(
+    (
+      await host.patch("/api/collections/" + collection.id, {
+        data: { name: "Ideas for two" },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await host.patch("/api/outings/" + id, {
+    data: { ...plan, date: "2099-01-01" },
+  });
+  expect(
+    (
+      await host.patch("/api/outings/" + id, { data: { completed: true } })
+    ).status(),
+  ).toBe(400);
+  for (const request of [host, companion]) {
+    await request.delete("/api/account", {
+      data: { password: "test-long-password-123" },
+    });
+    await request.dispose();
+  }
+});
+
+test("mobile invitation preview, acceptance, and withdrawal", async ({
+  page,
+  playwright,
+}) => {
+  const host = await playwright.request.newContext({
+    baseURL: "http://127.0.0.1:3100",
+  });
+  await account(host, "invitehost");
+  const friend = await account(page.request, "inviteguest");
+  await host.post("/api/outings", {
+    data: {
+      title: "Coffee with a friend",
+      date: "2026-10-02",
+      notes: "Meet at the garden table.",
+      visibility: "private",
+      stops: ["fern-and-fable", "the-gallery"],
+      invitees: [friend.username],
+    },
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.getByRole("button", { name: /Notifications/ }).click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Meet at the garden table.",
+  );
+  await expect(page.getByRole("dialog")).toContainText(
+    "The Gallery on the Corner",
+  );
+  await expect(
+    page.getByLabel("Who can see my association with Coffee with a friend?"),
+  ).toHaveValue("private");
+  await page.getByRole("button", { name: "Accept", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("Accepted · private");
+  await page.getByRole("button", { name: "View my outings" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Coffee with a friend" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Leave outing", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Coffee with a friend" }),
+  ).toHaveCount(0);
+  await page
+    .locator(".mobile-nav")
+    .getByRole("button", { name: "Community", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Find your people. Find your places." }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBeTruthy();
+  await page.request.delete("/api/account", {
+    data: { password: "test-long-password-123" },
+  });
+  await host.delete("/api/account", {
+    data: { password: "test-long-password-123" },
+  });
+  await host.dispose();
 });

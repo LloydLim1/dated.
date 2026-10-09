@@ -1,6 +1,7 @@
 node_modules/
 .npm-cache/
 .data-test/
+.data-frontend-qa/
 .data-backup-test/
 .next/
 .next-test/

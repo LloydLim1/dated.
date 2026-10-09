@@ -1,0 +1,174 @@
+{
+  "checkedAt": "2026-10-09",
+  "namedBrands": [
+    {
+      "name": "Pickup Coffee",
+      "aliases": ["Pickup Coffee"],
+      "website": "https://www.pickup-coffee.com/",
+      "menu": "https://www.pickup-coffee.com/menu"
+    },
+    {
+      "name": "ArmyNavy",
+      "aliases": ["Army Navy", "ArmyNavy", "Army Navy Burger + Burrito"],
+      "website": "https://www.armynavy.com.ph/",
+      "menu": "https://menu.klikit.io/menu/RgjhghP61njsX01UKZELO4L9"
+    },
+    {
+      "name": "Hap Chan",
+      "aliases": ["Hap Chan", "HapChan"],
+      "website": "https://www.hapchan.com.ph/",
+      "menu": "https://www.hapchan.com.ph/menu-chineseclassic.html"
+    },
+    {
+      "name": "Tapa King",
+      "aliases": ["Tapa King"],
+      "website": "https://tapaking.com.ph/",
+      "menu": "https://tapaking.com.ph/our-food"
+    },
+    {
+      "name": "North Park",
+      "aliases": ["North Park", "North Park Noodle House"],
+      "website": "https://www.northpark.com.ph/",
+      "menu": "https://www.northpark.com.ph/menu"
+    },
+    {
+      "name": "Angel's Pizza",
+      "aliases": ["Angel's Pizza", "Angels Pizza"],
+      "website": "https://www.angelspizza.com.ph/",
+      "menu": "https://www.angelspizza.com.ph/menu"
+    },
+    {
+      "name": "Gerry's Grill",
+      "aliases": ["Gerry's Grill", "Gerry's Restaurant and Bar"],
+      "website": "https://www.gerrysgrill.com/PH",
+      "logoWebsite": "https://www.gerrysgrill.com/",
+      "menu": "https://www.gerrysgrill.com/PH#menu"
+    },
+    {
+      "name": "Serenitea",
+      "aliases": ["Serenitea"],
+      "website": "https://iloveserenitea.com/",
+      "menu": "https://iloveserenitea.com/menu/"
+    },
+    {
+      "name": "Turks",
+      "aliases": ["Turks"],
+      "website": "https://www.turks.ph/",
+      "menu": "https://www.turks.ph/our-menu/"
+    },
+    {
+      "name": "24 Chicken",
+      "aliases": ["24 Chicken"],
+      "website": "https://24chicken.com/",
+      "menu": "https://24chicken.com/our-menu"
+    },
+    {
+      "name": "Hen Lin",
+      "aliases": ["Hen Lin", "Henlin"],
+      "website": "https://henlin.com/"
+    },
+    {
+      "name": "Zagu",
+      "aliases": ["Zagu"],
+      "website": "https://zagushakes.com/",
+      "menu": "https://zagushakes.com/menu/"
+    },
+    {
+      "name": "Master Siomai",
+      "aliases": ["Master Siomai"],
+      "website": "https://www.mastersiomai.com/"
+    },
+    {
+      "name": "MESA",
+      "aliases": ["Mesa", "MESA Filipino Moderne"],
+      "website": "https://mesarestaurant.ph/"
+    },
+    {
+      "name": "Manam",
+      "aliases": ["Manam", "Manam Comfort Filipino"],
+      "website": "https://www.momentgroup.ph/brands/show/manam",
+      "menu": "https://manam.momentfood.com/"
+    },
+    {
+      "name": "Shawarma Shack",
+      "aliases": ["Shawarma Shack", "The Shawarma Shack"],
+      "website": "https://shawarmashack.ph/",
+      "menu": "https://shawarmashack.ph/our-menu.html"
+    },
+    {
+      "name": "Banapple",
+      "aliases": ["Banapple", "Banapple Pies & Cheesecakes"],
+      "website": "https://banapple.ph/",
+      "menu": "https://banapple.ph/shop/"
+    },
+    {
+      "name": "Conti's",
+      "aliases": ["Conti's", "Contis", "Conti's Bakeshop & Restaurant"],
+      "website": "https://www.contis.ph/",
+      "menu": "https://www.contis.ph/pages/restaurant-menu"
+    },
+    {
+      "name": "Kuya J",
+      "aliases": ["Kuya J", "Kuya J Restaurant"],
+      "website": "https://kuyaj.ph/",
+      "menu": "https://kuyaj.ph/menu-gma/"
+    }
+  ],
+  "brands": {
+    "Q62267228": {
+      "name": "Angel's Burger",
+      "website": "https://angelsburger.com/"
+    },
+    "Q62267166": {
+      "name": "Andok's",
+      "logoWebsite": "https://andoks.com.ph/"
+    },
+    "Q17065023": {
+      "name": "Chooks to Go",
+      "logoWebsite": "https://chooksacademy.chookstogo.com.ph/"
+    },
+    "Q6794477": {
+      "name": "Max's Restaurant",
+      "logoWebsite": "https://www.maxsgroupinc.com/index.php/brand/maxs-restaurant-3/"
+    },
+    "Q138635080": {
+      "name": "Pancake House",
+      "logoWebsite": "https://www.maxsgroupinc.com/brand/pancake-house-2/"
+    },
+    "Q8051689": {
+      "name": "Yellow Cab Pizza Co.",
+      "logoWebsite": "https://www.maxsgroupinc.com/brand/yellow-cab-4/"
+    },
+    "Q60741625": {
+      "name": "Potato Corner",
+      "website": "https://potatocorner.com/",
+      "menu": "https://potatocorner.com/menu/"
+    },
+    "Q1076816": {
+      "name": "Chowking",
+      "website": "https://www.chowking.ph/",
+      "menu": "https://www.chowking.ph/menu"
+    },
+    "Q62273503": {
+      "name": "Minute Burger",
+      "website": "https://www.minuteburger.com/"
+    },
+    "Q4941248": {
+      "name": "Bonchon Chicken",
+      "website": "https://bonchon.com.ph/",
+      "logoWebsite": "https://www.bonchon.com/",
+      "menu": "https://bonchon.com.ph/menu"
+    },
+    "Q6134929": {
+      "name": "Shakey's",
+      "website": "https://www.shakeyspizza.ph/",
+      "logoWebsite": "https://www.shakeys.com/",
+      "menu": "https://www.shakeyspizza.ph/"
+    },
+    "Q30591352": {
+      "name": "Bo's Coffee",
+      "website": "https://www.boscoffee.com/",
+      "menu": "https://www.boscoffee.com/pages/menu-1"
+    }
+  }
+}

@@ -1,0 +1,140 @@
+{
+  "results": [
+    {
+      "name": "desktop-home",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "laptop-home",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "tablet-home",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-home",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-place",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-auth",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-404",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "desktop-explore",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "desktop-saved",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "desktop-outings",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "desktop-community",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "desktop-profile",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "desktop-profile-form",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "desktop-invitations",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "desktop-outing-form",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "desktop-review-form",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "desktop-review-form-bottom",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-explore",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-saved",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-outings",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-community",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-profile",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-profile-form",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-invitations",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-outing-form",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-review-form",
+      "overflow": false,
+      "violations": []
+    },
+    {
+      "name": "mobile-review-form-bottom",
+      "overflow": false,
+      "violations": []
+    }
+  ],
+  "errors": []
+}

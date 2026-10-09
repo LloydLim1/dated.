@@ -1,4 +1,23 @@
 export type Visibility = "public" | "followers" | "private";
+export const METRO_CITIES = [
+  "Caloocan",
+  "Las Piñas",
+  "Makati",
+  "Malabon",
+  "Mandaluyong",
+  "Manila",
+  "Marikina",
+  "Muntinlupa",
+  "Navotas",
+  "Parañaque",
+  "Pasay",
+  "Pasig",
+  "Pateros",
+  "Quezon City",
+  "San Juan",
+  "Taguig",
+  "Valenzuela",
+];
 export type Category = "Café" | "Restaurant" | "Museum" | "Cinema";
 export type User = {
   id: string;
@@ -19,15 +38,62 @@ export type Place = {
   address: string;
   description: string;
   image: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
+  locationStatus?: "mapped" | "address_only";
+  locationSource?: string;
   budget: number;
   tags: string[];
   rating: number | null;
   reviewCount: number;
+  ratedReviewerCount?: number;
+  supportedReviewerCount?: number;
   independentVisits: number;
   sample: boolean;
   hours: string;
+  sourceUrl?: string;
+  logo?: string;
+  logoSource?: string;
+  budgetKnown?: boolean;
+  brandId?: string;
+  brandName?: string;
+  website?: string;
+  websiteCountry?: "PH";
+  websiteStatus?: "identity_unconfirmed";
+  menuUrl?: string;
+  menuSource?: string;
+  menuCountry?: "PH";
+  menuUnavailableReason?: "country_unconfirmed";
+  menuStatus?:
+    "reachable" | "restricted" | "unavailable" | "unchecked" | "unverified";
+  menuCheckedAt?: number;
+  priceText?: string;
+  priceSource?: string;
+  checkedAt?: number;
+  mapStatus?: "confirmed" | "unconfirmed";
+  missingSince?: number;
+  catalogRegion?: string;
+  guideUrl?: string;
+  guideCheckedAt?: string;
+  detailsSource?: "Philippine Museums" | "OpenStreetMap";
+  museumDirectoryUrl?: string;
+  museumCheckedAt?: number;
+  admissionText?: string;
+  admissionSource?: string;
+  visitingNotice?: string;
+};
+export type PhotoPost = {
+  id: string;
+  author: User;
+  placeId: string;
+  caption: string;
+  visitDate: string;
+  visibility: Visibility;
+  media: string[];
+  createdAt: number;
+  likes: number;
+  liked: boolean;
+  comments: { id: string; author: User; body: string; createdAt: number }[];
 };
 export type Review = {
   id: string;
@@ -38,7 +104,7 @@ export type Review = {
   body: string;
   visitDate: string;
   ratings: Record<string, number>;
-  spending: number;
+  spending: number | null;
   visibility: Visibility;
   incentive: boolean;
   supported: boolean;
@@ -69,11 +135,16 @@ export type Invitation = {
   title: string;
   from: string;
   status: string;
+  visibility: Visibility;
+  date: string;
+  notes: string;
+  stops: string[];
 };
 export type Bootstrap = {
   me: User | null;
   places: Place[];
   feed: Review[];
+  posts: PhotoPost[];
   users: User[];
   following: string[];
   collections: Collection[];
@@ -81,6 +152,24 @@ export type Bootstrap = {
   invitations: Invitation[];
   unread: number;
   mode: string;
+  catalog?: {
+    status: string;
+    count: number;
+    lastSuccess?: number;
+    nextDue?: number;
+    logos?: number;
+    menus?: number;
+    museums?: {
+      count: number;
+      sourceEntries: number;
+      lastSuccess?: number;
+      status: string;
+    };
+    prices?: number;
+    cinemas?: { count: number; status: string; lastSuccess?: number };
+    cities: { name: string; count: number }[];
+    error?: string;
+  };
 };
 export const CRITERIA: Record<Category, string[]> = {
   Café: ["Coffee & drinks", "Atmosphere", "Service", "Value"],

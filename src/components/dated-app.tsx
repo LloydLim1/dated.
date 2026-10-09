@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -44,10 +44,20 @@ import {
   BookOpen,
   LoaderCircle,
   CheckCircle2,
+  Pencil,
+  Sparkles,
+  Share2,
 } from "lucide-react";
 import Modal from "./modal";
+import PlaceCover from "./place-cover";
+import PlaceLogo from "./place-logo";
+import PremiumStudio from "./premium-studio";
+import PlaceSelect from "./place-select";
+import { PhotoCard, PhotoComposer, PhotoGrid } from "./photo-posts";
+import { philippineDate } from "@/lib/philippine-date.mjs";
 import {
   CRITERIA,
+  METRO_CITIES,
   average,
   money,
   type Bootstrap,
@@ -55,6 +65,9 @@ import {
   type Review,
   type User,
   type Visibility,
+  type Outing,
+  type Collection,
+  type PhotoPost,
 } from "@/lib/types";
 const PlaceMap = dynamic(() => import("./place-map"), {
   ssr: false,
@@ -68,6 +81,7 @@ const empty: Bootstrap = {
   me: null,
   places: [],
   feed: [],
+  posts: [],
   users: [],
   following: [],
   collections: [],
@@ -94,6 +108,8 @@ type ModalState = {
   type:
     | "auth"
     | "review"
+    | "post"
+    | "postview"
     | "outing"
     | "filters"
     | "location"
@@ -106,12 +122,17 @@ type ModalState = {
     | "report"
     | "delete"
     | "moderation"
-    | "person";
+    | "person"
+    | "confirm";
   place?: Place;
   review?: Review;
+  post?: PhotoPost;
   person?: User;
   outingId?: string;
   visitDate?: string;
+  outing?: Outing;
+  collection?: Collection;
+  confirm?: { path: string; message: string; description: string };
 };
 async function api<T = Record<string, unknown>>(
   path: string,
@@ -139,8 +160,9 @@ async function api<T = Record<string, unknown>>(
 }
 function distance(
   a: { lat: number; lng: number },
-  b: { lat: number; lng: number },
+  b: { lat: number | null; lng: number | null },
 ) {
+  if (b.lat === null || b.lng === null) return Infinity;
   const rad = Math.PI / 180;
   const dlat = (b.lat - a.lat) * rad,
     dlng = (b.lng - a.lng) * rad;
@@ -193,20 +215,31 @@ export default function DatedApp({
   const [toast, setToast] = useState("");
   const [pending, setPending] = useState(false);
   const [feedTab, setFeedTab] = useState("Discover");
+  const [journalTab, setJournalTab] = useState("All");
+  const [mapPlaceIds, setMapPlaceIds] = useState<string[]>([]);
   const [collection, setCollection] = useState("all");
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(
     null,
   );
   const [visibleCount, setVisibleCount] = useState(6);
   const [modalError, setModalError] = useState("");
+  const [resume, setResume] = useState<{
+    modal?: ModalState;
+    view?: string;
+  } | null>(null);
+  const [outingTab, setOutingTab] = useState("Upcoming");
+  const [premiumOuting, setPremiumOuting] = useState("");
+  const placesRef = useRef<Place[]>([]);
   const setModal = (value: ModalState | null) => {
     setModalError("");
+    if (!value) setResume(null);
     setModalState(value);
   };
   const refresh = useCallback(async () => {
     try {
       const d = await api<Bootstrap>("bootstrap");
       setData(d);
+      placesRef.current = d.places;
       setError("");
     } catch (e) {
       setError((e as Error).message);
@@ -220,6 +253,9 @@ export default function DatedApp({
       .then((d) => {
         if (active) {
           setData(d);
+          placesRef.current = d.places;
+          const id = new URLSearchParams(location.search).get("place");
+          setPlace(d.places.find((p) => p.id === id) || null);
           setError("");
         }
       })
@@ -231,7 +267,13 @@ export default function DatedApp({
       });
     if ("serviceWorker" in navigator)
       navigator.serviceWorker.register("/sw.js").catch(() => {});
-    const onPop = () => setView(location.pathname.slice(1) || "home");
+    const onPop = () => {
+      setView(location.pathname.slice(1) || "home");
+      setModalState(null);
+      setModalError("");
+      const id = new URLSearchParams(location.search).get("place");
+      setPlace(placesRef.current.find((p) => p.id === id) || null);
+    };
     window.addEventListener("popstate", onPop);
     return () => {
       active = false;
@@ -246,12 +288,25 @@ export default function DatedApp({
   const go = (next: string) => {
     setView(next);
     setPlace(null);
+    setModal(null);
     setVisibleCount(6);
     history.pushState(null, "", next === "home" ? "/" : "/" + next);
     window.scrollTo({ top: 0, behavior: "instant" });
+    requestAnimationFrame(() =>
+      document.getElementById("main")?.focus({ preventScroll: true }),
+    );
   };
-  const requireAccount = () => {
+  const requireAccount = (nextModal?: ModalState, nextView?: string) => {
+    if (loading) {
+      setToast("Your account is still loading. Please try again in a moment.");
+      return false;
+    }
     if (data.me) return true;
+    setResume({
+      modal:
+        nextModal || (modal?.type !== "auth" ? modal || undefined : undefined),
+      view: nextView,
+    });
     setModal({ type: "auth" });
     return false;
   };
@@ -278,14 +333,55 @@ export default function DatedApp({
       setPending(false);
     }
   }
-  const openPlace = useCallback((p: Place) => setPlace(p), []);
+  const openPlace = useCallback((p: Place) => {
+    setPlace(p);
+    const url = new URL(location.href);
+    url.searchParams.set("place", p.id);
+    history.pushState({ datedPlace: true }, "", url.pathname + url.search);
+  }, []);
+  const closePlace = () => {
+    setPlace(null);
+    if (history.state?.datedPlace) history.back();
+    else {
+      const url = new URL(location.href);
+      url.searchParams.delete("place");
+      history.replaceState(null, "", url.pathname + url.search);
+    }
+  };
+  const clearFilters = () => {
+    setQuery("");
+    setCategory("All places");
+    setCity("Metro Manila");
+    setBudget(0);
+    setOccasion("Any occasion");
+    setVisibleCount(6);
+  };
+  const hasFilters =
+    !!query ||
+    category !== "All places" ||
+    city !== "Metro Manila" ||
+    !!budget ||
+    occasion !== "Any occasion";
   const savedIds = new Set(data.collections.flatMap((c) => c.placeIds));
+  const coverPhotos = useMemo(() => {
+    const photos = new Map<string, string>();
+    for (const post of [...data.posts].sort(
+      (a, b) => b.createdAt - a.createdAt,
+    ))
+      if (
+        post.visibility === "public" &&
+        post.media[0] &&
+        !photos.has(post.placeId)
+      )
+        photos.set(post.placeId, "/api/media/" + post.media[0]);
+    return photos;
+  }, [data.posts]);
   const places = useMemo(() => {
     let list = data.places.filter(
       (p) =>
         (category === "All places" || p.category === category) &&
         (city === "Metro Manila" || city === "Near me" || p.city === city) &&
-        (!budget || p.budget <= budget) &&
+        (!budget || (p.budgetKnown !== false && p.budget <= budget)) &&
         (occasion === "Any occasion" || p.tags.includes(occasion)) &&
         `${p.name} ${p.city} ${p.neighborhood} ${p.category} ${p.tags.join(" ")}`
           .toLowerCase()
@@ -296,7 +392,11 @@ export default function DatedApp({
         .filter((p) => distance(coords, p) < 20)
         .sort((a, b) => distance(coords, a) - distance(coords, b));
     else if (sort === "Budget friendly")
-      list = list.sort((a, b) => a.budget - b.budget);
+      list = list.sort(
+        (a, b) =>
+          (a.budgetKnown === false ? Infinity : a.budget) -
+          (b.budgetKnown === false ? Infinity : b.budget),
+      );
     else if (sort === "Trending")
       list = list.sort(
         (a, b) =>
@@ -330,7 +430,21 @@ export default function DatedApp({
                 .find((c) => c.id === collection)
                 ?.placeIds.includes(p.id),
         )
-      : places;
+      : view === "map"
+        ? places.filter((p) => mapPlaceIds.includes(p.id))
+        : places;
+  const cityMapCenter = useMemo(() => {
+    if (coords || city === "Metro Manila" || city === "Near me") return coords;
+    const selected = data.places.filter(
+      (p): p is Place & { lat: number; lng: number } =>
+        p.city === city && !p.sample && p.lat !== null && p.lng !== null,
+    );
+    if (!selected.length) return null;
+    return {
+      lat: selected.reduce((s, p) => s + p.lat, 0) / selected.length,
+      lng: selected.reduce((s, p) => s + p.lng, 0) / selected.length,
+    };
+  }, [city, coords, data.places]);
   const feed = data.feed.filter((r) =>
     view === "profile"
       ? r.author.id === data.me?.id
@@ -338,14 +452,95 @@ export default function DatedApp({
         ? data.following.includes(r.author.id)
         : true,
   );
-  const startReview = (p?: Place, r?: Review) => {
-    if (requireAccount()) setModal({ type: "review", place: p, review: r });
+  const posts = data.posts.filter((p) =>
+    view === "profile"
+      ? p.author.id === data.me?.id
+      : feedTab === "Following"
+        ? data.following.includes(p.author.id)
+        : true,
+  );
+  const startPost = (p?: Place, post?: PhotoPost) => {
+    const next: ModalState = { type: "post", place: p, post };
+    if (requireAccount(next)) setModal(next);
   };
+  const discovered = useCallback((found: Place[]) => {
+    setMapPlaceIds(found.map((p) => p.id));
+    setData((current) => {
+      const map = new Map(current.places.map((p) => [p.id, p]));
+      found.forEach((p) => {
+        const prior = map.get(p.id);
+        map.set(p.id, {
+          ...p,
+          rating: prior?.rating ?? null,
+          reviewCount: prior?.reviewCount ?? 0,
+          ratedReviewerCount: prior?.ratedReviewerCount ?? 0,
+          supportedReviewerCount: prior?.supportedReviewerCount ?? 0,
+          independentVisits: prior?.independentVisits ?? 0,
+        });
+      });
+      const places = [...map.values()];
+      placesRef.current = places;
+      return { ...current, places };
+    });
+  }, []);
+  const photoCard = (post: PhotoPost) => (
+    <PhotoCard
+      key={post.id}
+      post={post}
+      place={data.places.find((p) => p.id === post.placeId)}
+      me={data.me}
+      onPlace={() => {
+        setModal(null);
+        const p = data.places.find((p) => p.id === post.placeId);
+        if (p) openPlace(p);
+      }}
+      onPerson={() => setModal({ type: "person", person: post.author })}
+      onEdit={() => startPost(undefined, post)}
+      onDelete={async () => {
+        const deleted = await action(
+          "posts/" + post.id,
+          undefined,
+          "Photo post deleted.",
+          "DELETE",
+        );
+        if (deleted && modal?.type === "postview") setModal(null);
+        return deleted;
+      }}
+      onReact={() => {
+        if (requireAccount({ type: "postview", post }))
+          void action("posts/" + post.id + "/reactions", {}, "Like updated.");
+      }}
+      onComment={async (body) =>
+        requireAccount({ type: "postview", post })
+          ? action("posts/" + post.id + "/comments", { body }, "Comment added.")
+          : false
+      }
+    />
+  );
+  const startReview = (p?: Place, r?: Review) => {
+    const next: ModalState = { type: "review", place: p, review: r };
+    if (requireAccount(next)) setModal(next);
+  };
+  const myOutings = data.outings.filter(
+    (o) =>
+      o.owner.id === data.me?.id ||
+      o.participants.some(
+        (p) => p.user.id === data.me?.id && p.status === "accepted",
+      ),
+  );
+  const shownOutings = myOutings.filter(
+    (o) =>
+      outingTab === "All outings" ||
+      (outingTab === "Visited" ? o.completed : !o.completed),
+  );
+  const activeCollection = data.collections.find((c) => c.id === collection);
   const save = (p: Place) => {
-    if (requireAccount()) setModal({ type: "save", place: p });
+    const next: ModalState = { type: "save", place: p };
+    if (requireAccount(next)) setModal(next);
   };
   const writeOuting = (p?: Place) => {
-    if (requireAccount()) setModal({ type: "outing", place: p });
+    const next: ModalState = { type: "outing", place: p };
+    if (requireAccount(next)) setModal(next);
   };
   const pageTitles: Record<string, [string, string]> = {
     explore: [
@@ -370,11 +565,15 @@ export default function DatedApp({
     ],
     map: [
       "A different way to see the city.",
-      "Explore sample places around Metro Manila.",
+      "Find real restaurants, cafés and museums as you explore the map.",
+    ],
+    premium: [
+      "A little more Dated.",
+      "Design a day worth sharing. Premium is free to preview.",
     ],
   };
   return (
-    <div className="app-shell">
+    <div className={"app-shell" + (view === "map" ? " map-shell" : "")}>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
@@ -417,8 +616,17 @@ export default function DatedApp({
         </nav>
         <div className="sidebar-label">A LITTLE MORE YOU</div>
         <button
+          className={"nav-item " + (view === "premium" ? "active" : "")}
+          onClick={() => go("premium")}
+        >
+          <Sparkles size={20} />
+          Dated Premium
+        </button>
+        <button
           className={"nav-item " + (view === "profile" ? "active" : "")}
-          onClick={() => (data.me ? go("profile") : setModal({ type: "auth" }))}
+          onClick={() =>
+            data.me ? go("profile") : requireAccount(undefined, "profile")
+          }
         >
           <BookOpen size={20} />
           My journal
@@ -445,7 +653,7 @@ export default function DatedApp({
           <button
             className="profile-shortcut"
             onClick={() =>
-              data.me ? go("profile") : setModal({ type: "auth" })
+              data.me ? go("profile") : requireAccount(undefined, "profile")
             }
           >
             {data.me ? (
@@ -510,10 +718,11 @@ export default function DatedApp({
           <span className="top-divider" />
           <button
             className="icon-button notifications-button"
+            disabled={loading || pending}
             onClick={() =>
               data.me
                 ? setModal({ type: "notifications" })
-                : setModal({ type: "auth" })
+                : requireAccount({ type: "notifications" })
             }
             aria-label={
               "Notifications" +
@@ -534,13 +743,18 @@ export default function DatedApp({
           ) : (
             <button
               className="button join-button"
+              disabled={loading}
               onClick={() => setModal({ type: "auth" })}
             >
               Join Dated
             </button>
           )}
         </header>
-        <main id="main" className="main-content">
+        <main
+          id="main"
+          className={"main-content " + (view === "map" ? "map-main" : "")}
+          tabIndex={-1}
+        >
           {error ? (
             <div className="error-state">
               <h2>Let’s try that again.</h2>
@@ -662,6 +876,7 @@ export default function DatedApp({
                             <button
                               className={view === "map" ? "" : "selected"}
                               aria-label="Grid view"
+                              aria-pressed={view !== "map"}
                               onClick={() => go("explore")}
                             >
                               <Grid2X2 size={18} />
@@ -669,6 +884,7 @@ export default function DatedApp({
                             <button
                               className={view === "map" ? "selected" : ""}
                               aria-label="Map view"
+                              aria-pressed={view === "map"}
                               onClick={() => go("map")}
                             >
                               <MapIcon size={18} />
@@ -685,6 +901,7 @@ export default function DatedApp({
                           {categories.map((c) => (
                             <button
                               key={c.name}
+                              aria-pressed={category === c.name}
                               className={
                                 "category-chip " +
                                 (category === c.name ? "selected" : "")
@@ -718,6 +935,48 @@ export default function DatedApp({
                           )}
                         </button>
                       </div>
+                      {hasFilters && (
+                        <div
+                          className="active-filters"
+                          aria-label="Active filters"
+                        >
+                          {query && (
+                            <button onClick={() => setQuery("")}>
+                              Search: {query}
+                              <X size={14} />
+                            </button>
+                          )}
+                          {city !== "Metro Manila" && (
+                            <button
+                              onClick={() => {
+                                setCity("Metro Manila");
+                                setCoords(null);
+                              }}
+                            >
+                              {city}
+                              <X size={14} />
+                            </button>
+                          )}
+                          {!!budget && (
+                            <button onClick={() => setBudget(0)}>
+                              Up to {money(budget)}
+                              <X size={14} />
+                            </button>
+                          )}
+                          {occasion !== "Any occasion" && (
+                            <button onClick={() => setOccasion("Any occasion")}>
+                              {occasion}
+                              <X size={14} />
+                            </button>
+                          )}
+                          <button
+                            className="inline-link"
+                            onClick={clearFilters}
+                          >
+                            Clear all
+                          </button>
+                        </div>
+                      )}
                       {view === "saved" && (
                         <div className="collection-tabs">
                           <button
@@ -737,7 +996,7 @@ export default function DatedApp({
                           ))}
                           <button
                             onClick={() =>
-                              requireAccount() &&
+                              requireAccount({ type: "collection" }) &&
                               setModal({ type: "collection" })
                             }
                           >
@@ -746,9 +1005,85 @@ export default function DatedApp({
                           </button>
                         </div>
                       )}
-                      {view === "map" && (
-                        <PlaceMap places={places} onSelect={openPlace} />
+                      {view === "saved" && activeCollection && (
+                        <div className="collection-toolbar">
+                          <p>
+                            <Lock size={14} />
+                            Private collection ·{" "}
+                            {activeCollection.placeIds.length} saved places
+                          </p>
+                          <button
+                            className="text-button"
+                            onClick={() =>
+                              setModal({
+                                type: "collection",
+                                collection: activeCollection,
+                              })
+                            }
+                          >
+                            <Pencil size={15} />
+                            Rename
+                          </button>
+                          <button
+                            className="text-button"
+                            onClick={() =>
+                              setModal({
+                                type: "confirm",
+                                confirm: {
+                                  path: "collections/" + activeCollection.id,
+                                  message: "Collection deleted.",
+                                  description: `Delete “${activeCollection.name}”? Places saved in other collections will still be there.`,
+                                },
+                              })
+                            }
+                          >
+                            <Trash2 size={15} />
+                            Delete collection
+                          </button>
+                        </div>
                       )}
+                      {view === "map" && (
+                        <PlaceMap
+                          onSelect={openPlace}
+                          onDiscover={discovered}
+                          places={places}
+                          center={cityMapCenter}
+                          category={category}
+                          onCategory={setCategory}
+                          query={query}
+                          onQuery={setQuery}
+                          onFilters={() => setModal({ type: "filters" })}
+                          onGrid={() => go("explore")}
+                          onSave={save}
+                          savedIds={savedIds}
+                          catalogCount={data.catalog?.count}
+                        />
+                      )}
+                      {(view === "explore" || view === "map") &&
+                        !!data.catalog?.lastSuccess && (
+                          <p className="catalog-summary">
+                            <Globe size={16} aria-hidden="true" />
+                            <span>
+                              {data.catalog.count.toLocaleString()} mapped food
+                              places across 17 Metro Manila cities and
+                              municipalities.
+                              {data.catalog.museums?.count
+                                ? ` Plus ${data.catalog.museums.count.toLocaleString()} museums.`
+                                : ""}{" "}
+                              Updated{" "}
+                              {new Date(
+                                data.catalog.lastSuccess,
+                              ).toLocaleDateString("en-PH", {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                              .{" "}
+                              {data.catalog.status === "error"
+                                ? "Refresh delayed; saved listings remain available."
+                                : "Refreshed weekly."}
+                            </span>
+                          </p>
+                        )}
                       <div
                         className={
                           view === "home" ? "home-columns" : "browse-columns"
@@ -769,7 +1104,10 @@ export default function DatedApp({
                                 ),
                               )}
                             </div>
-                            <span>{visiblePlaces.length} places</span>
+                            <span>
+                              {visiblePlaces.length}{" "}
+                              {visiblePlaces.length === 1 ? "place" : "places"}
+                            </span>
                           </div>
                           {visiblePlaces.length ? (
                             <>
@@ -781,7 +1119,8 @@ export default function DatedApp({
                                       key={p.id}
                                       place={p}
                                       saved={savedIds.has(p.id)}
-                                      onOpen={() => setPlace(p)}
+                                      coverPhoto={coverPhotos.get(p.id)}
+                                      onOpen={() => openPlace(p)}
                                       onSave={() => save(p)}
                                       km={
                                         city === "Near me" && coords
@@ -807,28 +1146,22 @@ export default function DatedApp({
                             <Empty
                               icon={<Compass />}
                               title={
-                                view === "saved"
+                                view === "saved" && !hasFilters
                                   ? "Good finds belong here."
                                   : "No places just yet."
                               }
                               text={
-                                view === "saved"
+                                view === "saved" && !hasFilters
                                   ? "Save a place you love and find it here whenever you’re ready."
                                   : "Try another neighborhood, category, or budget."
                               }
                               action={
-                                view === "saved"
+                                view === "saved" && !hasFilters
                                   ? () => go("explore")
-                                  : () => {
-                                      setQuery("");
-                                      setCategory("All places");
-                                      setCity("Metro Manila");
-                                      setBudget(0);
-                                      setOccasion("Any occasion");
-                                    }
+                                  : clearFilters
                               }
                               label={
-                                view === "saved"
+                                view === "saved" && !hasFilters
                                   ? "Explore places"
                                   : "Clear filters"
                               }
@@ -860,7 +1193,7 @@ export default function DatedApp({
                                   )!}
                                   me={data.me}
                                   onPlace={() =>
-                                    setPlace(
+                                    openPlace(
                                       data.places.find(
                                         (p) => p.id === r.placeId,
                                       )!,
@@ -937,7 +1270,7 @@ export default function DatedApp({
                                   <button
                                     className="itinerary-stop"
                                     key={p.id}
-                                    onClick={() => setPlace(p)}
+                                    onClick={() => openPlace(p)}
                                   >
                                     <span className="stop-line">
                                       <span>{i + 1}</span>
@@ -1065,12 +1398,13 @@ export default function DatedApp({
                           ))}
                           <button
                             className="write-link"
-                            onClick={() => startReview()}
+                            onClick={() => startPost()}
                           >
                             <Plus size={16} />
-                            Share an experience
+                            Post photos
                           </button>
                         </div>
+                        {posts.map(photoCard)}
                         {feed.length ? (
                           feed.map((r) => (
                             <ReviewCard
@@ -1081,7 +1415,7 @@ export default function DatedApp({
                               )!}
                               me={data.me}
                               onPlace={() =>
-                                setPlace(
+                                openPlace(
                                   data.places.find((p) => p.id === r.placeId)!,
                                 )
                               }
@@ -1198,6 +1532,15 @@ export default function DatedApp({
                       </aside>
                     </div>
                   )}
+                  {view === "premium" && (
+                    <PremiumStudio
+                      outings={data.outings}
+                      places={data.places}
+                      me={data.me}
+                      initialOuting={premiumOuting}
+                      onPlan={() => writeOuting()}
+                    />
+                  )}
                   {view === "outings" && (
                     <>
                       <div className="journal-banner">
@@ -1214,194 +1557,252 @@ export default function DatedApp({
                           Start a new outing
                         </button>
                       </div>
-                      {data.outings.filter(
-                        (o) =>
-                          o.owner.id === data.me?.id ||
-                          o.participants.some(
-                            (p) =>
-                              p.user.id === data.me?.id &&
-                              p.status === "accepted",
-                          ),
-                      ).length ? (
+                      <div
+                        className="large-tabs"
+                        role="group"
+                        aria-label="Outing status"
+                      >
+                        {["Upcoming", "Visited", "All outings"].map((tab) => (
+                          <button
+                            key={tab}
+                            className={outingTab === tab ? "active" : ""}
+                            aria-pressed={outingTab === tab}
+                            onClick={() => setOutingTab(tab)}
+                          >
+                            {tab}{" "}
+                            <span className="tab-count">
+                              {
+                                myOutings.filter(
+                                  (o) =>
+                                    tab === "All outings" ||
+                                    (tab === "Visited"
+                                      ? o.completed
+                                      : !o.completed),
+                                ).length
+                              }
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      {shownOutings.length ? (
                         <div className="outing-grid">
-                          {data.outings
-                            .filter(
-                              (o) =>
-                                o.owner.id === data.me?.id ||
-                                o.participants.some(
-                                  (p) =>
-                                    p.user.id === data.me?.id &&
-                                    p.status === "accepted",
-                                ),
-                            )
-                            .map((o) => (
-                              <article className="outing-card" key={o.id}>
-                                <div className="outing-cover">
-                                  <img
-                                    src={
-                                      data.places.find(
-                                        (p) => p.id === o.stops[0],
-                                      )?.image
-                                    }
-                                    alt="Illustrative outing cover"
-                                  />
-                                  <span className="outing-status">
-                                    {o.completed
-                                      ? "A memory, kept"
-                                      : "A plan in the making"}
+                          {shownOutings.map((o) => (
+                            <article className="outing-card" key={o.id}>
+                              <div className="outing-cover">
+                                <img
+                                  src={
+                                    data.places.find((p) => p.id === o.stops[0])
+                                      ?.image
+                                  }
+                                  alt="Illustrative outing cover"
+                                />
+                                <span className="outing-status">
+                                  {o.completed
+                                    ? "A memory, kept"
+                                    : "A plan in the making"}
+                                </span>
+                              </div>
+                              <div className="outing-card-body">
+                                <div className="muted-line">
+                                  <CalendarDays size={15} />
+                                  {formatDate(o.date)}
+                                  <span className="visibility-tag">
+                                    {o.owner.id === data.me?.id
+                                      ? o.visibility
+                                      : "Invited by " + o.owner.name}
                                   </span>
                                 </div>
-                                <div className="outing-card-body">
-                                  <div className="muted-line">
-                                    <CalendarDays size={15} />
-                                    {formatDate(o.date)}
-                                    <span className="visibility-tag">
-                                      {o.visibility}
-                                    </span>
-                                  </div>
-                                  <h2>{o.title}</h2>
-                                  <p>{o.notes}</p>
-                                  <ol className="outing-stops">
-                                    {o.stops.map((pid) => (
-                                      <li key={pid}>
-                                        <button
-                                          onClick={() =>
-                                            setPlace(
-                                              data.places.find(
-                                                (p) => p.id === pid,
-                                              )!,
-                                            )
-                                          }
-                                        >
-                                          {
+                                <h2>{o.title}</h2>
+                                <p>{o.notes}</p>
+                                <ol className="outing-stops">
+                                  {o.stops.map((pid) => (
+                                    <li key={pid}>
+                                      <button
+                                        onClick={() =>
+                                          openPlace(
                                             data.places.find(
                                               (p) => p.id === pid,
-                                            )?.name
-                                          }
-                                          <ChevronRight size={15} />
-                                        </button>
-                                        {o.completed && (
-                                          <button
-                                            className="text-button"
-                                            onClick={() => {
-                                              const existing = data.feed.find(
-                                                (r) =>
-                                                  r.outingId === o.id &&
-                                                  r.placeId === pid &&
-                                                  r.author.id === data.me?.id,
-                                              );
-                                              setModal({
-                                                type: "review",
-                                                place: data.places.find(
-                                                  (p) => p.id === pid,
-                                                ),
-                                                review: existing,
-                                                outingId: o.id,
-                                                visitDate: o.date,
-                                              });
-                                            }}
-                                          >
-                                            {data.feed.some(
+                                            )!,
+                                          )
+                                        }
+                                      >
+                                        {
+                                          data.places.find((p) => p.id === pid)
+                                            ?.name
+                                        }
+                                        <ChevronRight size={15} />
+                                      </button>
+                                      {o.completed && (
+                                        <button
+                                          className="text-button"
+                                          onClick={() => {
+                                            const existing = data.feed.find(
                                               (r) =>
                                                 r.outingId === o.id &&
                                                 r.placeId === pid &&
                                                 r.author.id === data.me?.id,
-                                            )
-                                              ? "Edit my review"
-                                              : "Review this stop"}
-                                          </button>
-                                        )}
-                                      </li>
-                                    ))}
-                                  </ol>
-                                  <div className="outing-companions">
-                                    <Avatar user={o.owner} small />
-                                    {o.participants.map((p) => (
-                                      <span
-                                        key={p.user.id}
-                                        className="companion"
-                                        title={p.status}
-                                      >
-                                        <Avatar user={p.user} small />
-                                        {p.status === "pending" && (
-                                          <small>Pending</small>
-                                        )}
-                                      </span>
-                                    ))}
-                                  </div>
-                                  {o.owner.id === data.me?.id ? (
-                                    <div className="outing-actions">
-                                      <button
-                                        className="text-button"
-                                        onClick={() =>
-                                          action(
+                                            );
+                                            setModal({
+                                              type: "review",
+                                              place: data.places.find(
+                                                (p) => p.id === pid,
+                                              ),
+                                              review: existing,
+                                              outingId: o.id,
+                                              visitDate: o.date,
+                                            });
+                                          }}
+                                        >
+                                          {data.feed.some(
+                                            (r) =>
+                                              r.outingId === o.id &&
+                                              r.placeId === pid &&
+                                              r.author.id === data.me?.id,
+                                          )
+                                            ? "Edit my review"
+                                            : "Review this stop"}
+                                        </button>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ol>
+                                <div className="outing-companions">
+                                  <Avatar user={o.owner} small />
+                                  {o.participants.map((p) => (
+                                    <span
+                                      key={p.user.id}
+                                      className="companion"
+                                      title={p.status}
+                                    >
+                                      <Avatar user={p.user} small />
+                                      {p.status === "pending" && (
+                                        <small>Pending</small>
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                                {o.owner.id === data.me?.id ? (
+                                  <div className="outing-actions">
+                                    <button
+                                      className="text-button"
+                                      onClick={() => {
+                                        setPremiumOuting(o.id);
+                                        go("premium");
+                                      }}
+                                    >
+                                      <Share2 size={16} />
+                                      Design & share
+                                    </button>
+                                    <button
+                                      className="text-button"
+                                      onClick={() =>
+                                        setModal({ type: "outing", outing: o })
+                                      }
+                                    >
+                                      <Pencil size={16} />
+                                      Edit plan
+                                    </button>
+                                    <button
+                                      className="text-button"
+                                      disabled={
+                                        pending ||
+                                        (!o.completed &&
+                                        o.date > philippineDate())
+                                      }
+                                      title={
+                                        !o.completed &&
+                                        o.date > philippineDate()
+                                          ? "Available on the date of your outing"
+                                          : undefined
+                                      }
+                                      onClick={async () => {
+                                        const previousTab = outingTab;
+                                        setOutingTab(
+                                          o.completed ? "Upcoming" : "Visited",
+                                        );
+                                        if (
+                                          !(await action(
                                             "outings/" + o.id,
                                             { completed: !o.completed },
                                             o.completed
                                               ? "Outing reopened."
                                               : "A memory, kept.",
                                             "PATCH",
-                                          )
-                                        }
-                                      >
-                                        <CheckCircle2 size={16} />
-                                        {o.completed
-                                          ? "Reopen plan"
-                                          : "Mark as visited"}
-                                      </button>
-                                      <button
-                                        className="icon-button"
-                                        aria-label={"Delete outing " + o.title}
-                                        onClick={() => {
-                                          if (
-                                            confirm(
-                                              "Delete this outing and its invitations?",
-                                            )
-                                          )
-                                            action(
-                                              "outings/" + o.id,
-                                              undefined,
-                                              "Outing deleted.",
-                                              "DELETE",
-                                            );
-                                        }}
-                                      >
-                                        <Trash2 size={16} />
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      className="text-button"
-                                      onClick={() => {
-                                        const invitation =
-                                          data.invitations.find(
-                                            (i) => i.outingId === o.id,
-                                          );
-                                        if (invitation)
-                                          action(
-                                            "invitations/" + invitation.id,
-                                            {
-                                              status: "declined",
-                                              visibility: "private",
-                                            },
-                                            "You left the outing.",
-                                          );
+                                          ))
+                                        )
+                                          setOutingTab(previousTab);
                                       }}
                                     >
-                                      Leave outing
+                                      <CheckCircle2 size={16} />
+                                      {o.completed
+                                        ? "Reopen plan"
+                                        : "Mark as visited"}
                                     </button>
-                                  )}
-                                </div>
-                              </article>
-                            ))}
+                                    <button
+                                      className="icon-button"
+                                      aria-label={"Delete outing " + o.title}
+                                      onClick={() =>
+                                        setModal({
+                                          type: "confirm",
+                                          confirm: {
+                                            path: "outings/" + o.id,
+                                            message: "Outing deleted.",
+                                            description: `Delete “${o.title}” and its invitations? Your reviews will remain in your journal.`,
+                                          },
+                                        })
+                                      }
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    className="text-button"
+                                    onClick={() => {
+                                      const invitation = data.invitations.find(
+                                        (i) => i.outingId === o.id,
+                                      );
+                                      if (invitation)
+                                        action(
+                                          "invitations/" + invitation.id,
+                                          {
+                                            status: "declined",
+                                            visibility: "private",
+                                          },
+                                          "You left the outing.",
+                                        );
+                                    }}
+                                  >
+                                    Leave outing
+                                  </button>
+                                )}
+                              </div>
+                            </article>
+                          ))}
                         </div>
                       ) : (
                         <Empty
                           icon={<CalendarDays />}
-                          title="The next good day is yours to plan."
-                          text="Pick your places, invite your people, and start a little story."
-                          action={() => writeOuting()}
-                          label="Plan an outing"
+                          title={
+                            outingTab === "Visited"
+                              ? "Your memories will live here."
+                              : "The next good day is yours to plan."
+                          }
+                          text={
+                            outingTab === "Visited"
+                              ? "After your outing, mark it as visited and write a review for each stop."
+                              : "Pick your places, invite your people, and start a little story."
+                          }
+                          action={() =>
+                            outingTab === "Visited"
+                              ? setOutingTab("Upcoming")
+                              : writeOuting()
+                          }
+                          label={
+                            outingTab === "Visited"
+                              ? "See upcoming plans"
+                              : "Plan an outing"
+                          }
                         />
                       )}
                     </>
@@ -1439,60 +1840,102 @@ export default function DatedApp({
                         <div className="profile-toolbar">
                           <h2>My experience journal</h2>
                           <button
+                            className="button secondary"
+                            onClick={() => go("premium")}
+                          >
+                            <Sparkles size={16} />
+                            Dated Premium
+                          </button>
+                          <button
                             className="button"
+                            onClick={() => startPost()}
+                          >
+                            <Camera size={16} />
+                            Post photos
+                          </button>
+                          <button
+                            className="button secondary"
                             onClick={() => startReview()}
                           >
                             <Plus size={16} />
                             Write a review
                           </button>
                         </div>
-                        {feed.map((r) => (
-                          <ReviewCard
-                            key={r.id}
-                            review={r}
-                            place={data.places.find((p) => p.id === r.placeId)!}
-                            me={data.me}
-                            onPlace={() =>
-                              setPlace(
-                                data.places.find((p) => p.id === r.placeId)!,
-                              )
+                        <div className="sort-tabs journal-tabs">
+                          {["All", "Photos", "Reviews"].map((tab) => (
+                            <button
+                              key={tab}
+                              className={journalTab === tab ? "active" : ""}
+                              onClick={() => setJournalTab(tab)}
+                            >
+                              {tab}
+                              {tab === "Photos"
+                                ? ` (${posts.length})`
+                                : tab === "Reviews"
+                                  ? ` (${feed.length})`
+                                  : ""}
+                            </button>
+                          ))}
+                        </div>
+                        {journalTab !== "Reviews" && (
+                          <PhotoGrid
+                            posts={posts}
+                            places={data.places}
+                            onOpen={(post) =>
+                              setModal({ type: "postview", post })
                             }
-                            onPerson={() => {}}
-                            onReact={() =>
-                              action(
-                                "reviews/" + r.id + "/reactions",
-                                {},
-                                "Helpful vote updated.",
-                              )
-                            }
-                            onComment={(body) =>
-                              action(
-                                "reviews/" + r.id + "/comments",
-                                { body },
-                                "Comment added.",
-                              )
-                            }
-                            onReport={() =>
-                              setModal({ type: "report", review: r })
-                            }
-                            onEdit={() =>
-                              startReview(
-                                data.places.find((p) => p.id === r.placeId),
-                                r,
-                              )
-                            }
-                            onDelete={() =>
-                              action(
-                                "reviews/" + r.id,
-                                undefined,
-                                "Review deleted.",
-                                "DELETE",
-                              )
-                            }
-                            requireAccount={requireAccount}
                           />
-                        ))}
-                        {!feed.length && (
+                        )}
+                        {journalTab !== "Photos" &&
+                          feed.map((r) => (
+                            <ReviewCard
+                              key={r.id}
+                              review={r}
+                              place={data.places.find(
+                                (p) => p.id === r.placeId,
+                              )!}
+                              me={data.me}
+                              onPlace={() =>
+                                openPlace(
+                                  data.places.find((p) => p.id === r.placeId)!,
+                                )
+                              }
+                              onPerson={() => {}}
+                              onReact={() =>
+                                action(
+                                  "reviews/" + r.id + "/reactions",
+                                  {},
+                                  "Helpful vote updated.",
+                                )
+                              }
+                              onComment={(body) =>
+                                action(
+                                  "reviews/" + r.id + "/comments",
+                                  { body },
+                                  "Comment added.",
+                                )
+                              }
+                              onReport={() =>
+                                setModal({ type: "report", review: r })
+                              }
+                              onEdit={() =>
+                                startReview(
+                                  data.places.find((p) => p.id === r.placeId),
+                                  r,
+                                )
+                              }
+                              onDelete={() =>
+                                action(
+                                  "reviews/" + r.id,
+                                  undefined,
+                                  "Review deleted.",
+                                  "DELETE",
+                                )
+                              }
+                              requireAccount={requireAccount}
+                            />
+                          ))}
+                        {journalTab === "Reviews" && !feed.length && (
                           <Empty
                             icon={<BookOpen />}
                             title="Every place has a story."
@@ -1523,6 +1966,21 @@ export default function DatedApp({
                             <Download size={16} />
                             Export my data
                           </button>
+                          {data.me.role === "admin" && (
+                            <button
+                              className="text-button"
+                              onClick={() =>
+                                void action(
+                                  "catalog/refresh",
+                                  {},
+                                  "Restaurant directory refresh started.",
+                                )
+                              }
+                            >
+                              <Globe size={16} />
+                              Refresh places directory
+                            </button>
+                          )}
                           {data.me.role === "admin" && (
                             <button
                               className="text-button"
@@ -1567,10 +2025,12 @@ export default function DatedApp({
               <footer className="footer">
                 <span className="footer-wordmark">dated.</span>
                 <p>
-                  Preview uses fictional sample places and stories. Photos are
-                  illustrative.
+                  Places come from OpenStreetMap and Philippine Museums. Sample
+                  places and stories are labeled. Journal photos are shared by
+                  visitors.
                 </p>
                 <div>
+                  <button onClick={() => go("premium")}>Dated Premium</button>
                   <button onClick={() => setModal({ type: "privacy" })}>
                     Privacy & trust
                   </button>
@@ -1585,10 +2045,11 @@ export default function DatedApp({
         </main>
       </div>
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {nav.slice(0, 4).map((n) => (
+        {nav.map((n) => (
           <button
             className={view === n.id ? "active" : ""}
             key={n.id}
+            aria-current={view === n.id ? "page" : undefined}
             onClick={() => go(n.id)}
           >
             <n.icon size={21} />
@@ -1603,7 +2064,9 @@ export default function DatedApp({
         ))}
         <button
           className={view === "profile" ? "active" : ""}
-          onClick={() => (data.me ? go("profile") : setModal({ type: "auth" }))}
+          onClick={() =>
+            data.me ? go("profile") : requireAccount(undefined, "profile")
+          }
         >
           <Users size={21} />
           <span>Me</span>
@@ -1623,27 +2086,60 @@ export default function DatedApp({
         </div>
       )}
       {place && !modal && (
-        <Modal title={place.name} wide onClose={() => setPlace(null)}>
+        <Modal title={place.name} wide onClose={closePlace}>
           <PlaceDetail
             place={data.places.find((p) => p.id === place.id) || place}
             reviews={data.feed.filter((r) => r.placeId === place.id)}
+            coverPhoto={coverPhotos.get(place.id)}
             onSave={() => save(place)}
             saved={savedIds.has(place.id)}
             onReview={() => startReview(place)}
             onOuting={() => writeOuting(place)}
+            onPost={() => startPost(place)}
             me={data.me}
             onEdit={(r) => startReview(place, r)}
             onReport={(r) =>
-              requireAccount() && setModal({ type: "report", review: r })
+              requireAccount({ type: "report", review: r }) &&
+              setModal({ type: "report", review: r })
             }
           />
+          <section className="place-photo-section">
+            <div className="profile-toolbar">
+              <h3>Moments at {place.name}</h3>
+              <button className="text-button" onClick={() => startPost(place)}>
+                <Camera size={16} />
+                Add your pictures
+              </button>
+            </div>
+            <PhotoGrid
+              posts={data.posts.filter((p) => p.placeId === place.id)}
+              places={data.places}
+              onOpen={(post) => setModal({ type: "postview", post })}
+            />
+          </section>
         </Modal>
       )}
       {modal && (
         <Modal
+          key={
+            modal.type +
+            (modal.outing?.id ||
+              modal.collection?.id ||
+              modal.review?.id ||
+              modal.post?.id ||
+              "")
+          }
           title={modalTitle(modal)}
-          wide={["review", "outing", "moderation"].includes(modal.type)}
+          wide={["review", "post", "outing", "moderation"].includes(modal.type)}
           onClose={() => setModal(null)}
+          protectChanges={[
+            "review",
+            "post",
+            "outing",
+            "collection",
+            "profile",
+          ].includes(modal.type)}
+          busy={pending}
         >
           {modalError && (
             <p className="form-error modal-error" role="alert">
@@ -1654,11 +2150,12 @@ export default function DatedApp({
             <AuthForm
               onSuccess={async () => {
                 await refresh();
-                setModal(null);
+                const next = resume;
+                setResume(null);
+                if (next?.view) go(next.view);
+                setModal(next?.modal || null);
                 setToast("Welcome to Dated. Make yourself at home.");
               }}
-              onPrivacy={() => setModal({ type: "privacy" })}
-              onTerms={() => setModal({ type: "terms" })}
             />
           )}
           {modal.type === "review" && (
@@ -1682,79 +2179,76 @@ export default function DatedApp({
               pending={pending}
             />
           )}
+          {modal.type === "post" && (
+            <PhotoComposer
+              places={data.places}
+              initialPlace={modal.place}
+              post={modal.post}
+              pending={pending}
+              onBusy={setPending}
+              onSubmit={async (body) => {
+                const saved = await action(
+                  modal.post ? "posts/" + modal.post.id : "posts",
+                  body,
+                  "Your pictures are in your journal.",
+                  modal.post ? "PATCH" : "POST",
+                );
+                if (saved) setModal(null);
+                return saved;
+              }}
+            />
+          )}
+          {modal.type === "postview" &&
+            modal.post &&
+            (data.posts.find((p) => p.id === modal.post?.id) ? (
+              photoCard(data.posts.find((p) => p.id === modal.post?.id)!)
+            ) : (
+              <p>This photo post is no longer available.</p>
+            ))}
           {modal.type === "outing" && (
             <OutingForm
               places={data.places}
               initialPlace={modal.place}
+              outing={modal.outing}
+              existingOutings={myOutings.filter(
+                (o) => o.owner.id === data.me?.id && !o.completed,
+              )}
+              onSelectExisting={(o) =>
+                setModal({ type: "outing", outing: o, place: modal.place })
+              }
               onSubmit={async (body) => {
                 if (
-                  await action("outings", body, "Your little plan is ready.")
+                  await action(
+                    modal.outing ? "outings/" + modal.outing.id : "outings",
+                    body,
+                    modal.outing
+                      ? "Your plan has been updated."
+                      : "Your little plan is ready.",
+                    modal.outing ? "PATCH" : "POST",
+                  )
                 ) {
                   setModal(null);
                   setPlace(null);
                   go("outings");
+                  setOutingTab(
+                    modal.outing?.completed ? "Visited" : "Upcoming",
+                  );
                 }
               }}
               pending={pending}
             />
           )}
           {modal.type === "filters" && (
-            <form
-              className="form-stack"
-              onSubmit={(e) => {
-                e.preventDefault();
-                setModal(null);
+            <FilterForm
+              budget={budget}
+              occasion={occasion}
+              onApply={(nextBudget, nextOccasion) => {
+                setBudget(nextBudget);
+                setOccasion(nextOccasion);
                 setVisibleCount(6);
+                setModal(null);
               }}
-            >
-              <p className="form-intro">Find a place that fits your day.</p>
-              <label>
-                Budget per person
-                <select
-                  value={budget}
-                  onChange={(e) => setBudget(Number(e.target.value))}
-                >
-                  <option value={0}>Any budget</option>
-                  <option value={400}>Up to ₱400</option>
-                  <option value={700}>Up to ₱700</option>
-                  <option value={1000}>Up to ₱1,000</option>
-                </select>
-              </label>
-              <label>
-                What’s the occasion?
-                <select
-                  value={occasion}
-                  onChange={(e) => setOccasion(e.target.value)}
-                >
-                  {[
-                    "Any occasion",
-                    "Coffee dates",
-                    "Date night",
-                    "Dinner with friends",
-                    "Solo exploring",
-                    "Art & culture",
-                    "Brunch",
-                    "Rainy days",
-                    "Outdoor seating",
-                  ].map((o) => (
-                    <option key={o}>{o}</option>
-                  ))}
-                </select>
-              </label>
-              <div className="form-actions">
-                <button
-                  type="button"
-                  className="button secondary"
-                  onClick={() => {
-                    setBudget(0);
-                    setOccasion("Any occasion");
-                  }}
-                >
-                  Reset filters
-                </button>
-                <button className="button">Show matching places</button>
-              </div>
-            </form>
+            />
           )}
           {modal.type === "location" && (
             <div className="form-stack">
@@ -1779,7 +2273,9 @@ export default function DatedApp({
                       });
                       setCity("Near me");
                       setModal(null);
-                      setToast("Showing sample places within 20 km.");
+                      setToast(
+                        "Showing places within 20 km. Open the map to discover more nearby.",
+                      );
                     },
                     () =>
                       setModalError(
@@ -1798,10 +2294,13 @@ export default function DatedApp({
               </button>
               {[
                 "Metro Manila",
-                "Makati",
-                "Taguig",
-                "Manila",
-                "Quezon City",
+                ...Array.from(
+                  new Set(
+                    data.places
+                      .map((p) => p.city)
+                      .filter((c) => c !== "Nearby" && c !== "Metro Manila"),
+                  ),
+                ).sort(),
               ].map((c) => (
                 <button
                   className="city-option"
@@ -1822,6 +2321,11 @@ export default function DatedApp({
           {modal.type === "notifications" && (
             <Notifications
               data={data}
+              pending={pending}
+              onView={() => {
+                go("outings");
+                setOutingTab("All outings");
+              }}
               onAction={async (id, status, visibility) => {
                 await action(
                   "invitations/" + id,
@@ -1837,13 +2341,54 @@ export default function DatedApp({
             <SimpleForm
               label="Collection name"
               placeholder="Slow Sundays, date nights, little escapes…"
-              button="Create collection"
+              button={
+                modal.collection ? "Save collection name" : "Create collection"
+              }
+              initialValue={modal.collection?.name}
+              minLength={2}
+              maxLength={60}
               pending={pending}
               onSubmit={async (name) => {
-                if (
-                  await action("collections", { name }, "Collection created.")
-                )
-                  setModal(null);
+                if (modal.collection) {
+                  if (
+                    await action(
+                      "collections/" + modal.collection.id,
+                      { name },
+                      "Collection renamed.",
+                      "PATCH",
+                    )
+                  )
+                    setModal(null);
+                  return;
+                }
+                if (pending) return;
+                setPending(true);
+                try {
+                  const created = await api<{ id: string }>("collections", {
+                    name,
+                  });
+                  await refresh();
+                  // Resume the original save chooser even if the subsequent save fails.
+                  setModal(
+                    modal.place ? { type: "save", place: modal.place } : null,
+                  );
+                  if (modal.place) {
+                    await api("collections/items", {
+                      collectionId: created.id,
+                      placeId: modal.place.id,
+                    });
+                    await refresh();
+                  } else setCollection(created.id);
+                  setToast(
+                    modal.place
+                      ? "Saved to " + name + "."
+                      : "Collection created.",
+                  );
+                } catch (e) {
+                  setModalError((e as Error).message);
+                } finally {
+                  setPending(false);
+                }
               }}
             />
           )}
@@ -1882,7 +2427,9 @@ export default function DatedApp({
               ))}
               <button
                 className="text-button"
-                onClick={() => setModal({ type: "collection" })}
+                onClick={() =>
+                  setModal({ type: "collection", place: modal.place })
+                }
               >
                 <Plus size={16} />
                 Create a new collection
@@ -1920,6 +2467,15 @@ export default function DatedApp({
                 </button>
               )}
               <h3>Public experiences</h3>
+              <PhotoGrid
+                posts={data.posts.filter(
+                  (p) =>
+                    p.author.id === modal.person?.id &&
+                    p.visibility === "public",
+                )}
+                places={data.places}
+                onOpen={(post) => setModal({ type: "postview", post })}
+              />
               {data.feed
                 .filter(
                   (r) =>
@@ -1932,7 +2488,7 @@ export default function DatedApp({
                     key={r.id}
                     onClick={() => {
                       setModal(null);
-                      setPlace(data.places.find((p) => p.id === r.placeId)!);
+                      openPlace(data.places.find((p) => p.id === r.placeId)!);
                     }}
                   >
                     <strong>{r.title}</strong>
@@ -2020,6 +2576,41 @@ export default function DatedApp({
               />
             </>
           )}
+          {modal.type === "confirm" && modal.confirm && (
+            <div className="form-stack">
+              <p className="form-intro">{modal.confirm.description}</p>
+              <p className="form-help">This cannot be undone.</p>
+              <div className="form-actions">
+                <button
+                  className="button secondary"
+                  disabled={pending}
+                  onClick={() => setModal(null)}
+                >
+                  Keep it
+                </button>
+                <button
+                  className="button danger-button"
+                  disabled={pending}
+                  onClick={async () => {
+                    if (
+                      await action(
+                        modal.confirm!.path,
+                        undefined,
+                        modal.confirm!.message,
+                        "DELETE",
+                      )
+                    ) {
+                      if (modal.confirm!.path.startsWith("collections/"))
+                        setCollection("all");
+                      setModal(null);
+                    }
+                  }}
+                >
+                  {pending ? "Deleting…" : "Delete permanently"}
+                </button>
+              </div>
+            </div>
+          )}
           {modal.type === "privacy" && <TrustContent />}
           {modal.type === "terms" && <TermsContent />}
           {modal.type === "moderation" && <Moderation onChanged={refresh} />}
@@ -2033,11 +2624,14 @@ function modalTitle(m: ModalState) {
     {
       auth: "A little more discovery.",
       review: m.review ? "Edit your experience" : "How was your visit?",
-      outing: "Make a day of it.",
+      post: m.post ? "Edit your photo post" : "A moment worth keeping",
+      postview: "A little moment, remembered",
+      outing: m.outing ? "A little change of plans" : "Make a day of it.",
       filters: "A place for your kind of day",
       location: "Where shall we explore?",
       notifications: "Your invitations",
       collection: "A collection of good places",
+      confirm: "A moment before you delete",
       save: "Save for a little later",
       profile: "Make it a little more you",
       privacy: "Good experiences. Honest opinions.",
@@ -2057,6 +2651,75 @@ function formatDate(date: string) {
     day: "numeric",
     year: "numeric",
   });
+}
+function FilterForm({
+  budget,
+  occasion,
+  onApply,
+}: {
+  budget: number;
+  occasion: string;
+  onApply: (budget: number, occasion: string) => void;
+}) {
+  const [draftBudget, setDraftBudget] = useState(budget);
+  const [draftOccasion, setDraftOccasion] = useState(occasion);
+  return (
+    <form
+      className="form-stack"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onApply(draftBudget, draftOccasion);
+      }}
+    >
+      <p className="form-intro">Find a place that fits your day.</p>
+      <label>
+        Budget per person
+        <select
+          value={draftBudget}
+          onChange={(e) => setDraftBudget(Number(e.target.value))}
+        >
+          <option value={0}>Any budget</option>
+          <option value={400}>Up to ₱400</option>
+          <option value={700}>Up to ₱700</option>
+          <option value={1000}>Up to ₱1,000</option>
+        </select>
+      </label>
+      <label>
+        What’s the occasion?
+        <select
+          value={draftOccasion}
+          onChange={(e) => setDraftOccasion(e.target.value)}
+        >
+          {[
+            "Any occasion",
+            "Coffee dates",
+            "Date night",
+            "Dinner with friends",
+            "Solo exploring",
+            "Art & culture",
+            "Brunch",
+            "Rainy days",
+            "Outdoor seating",
+          ].map((o) => (
+            <option key={o}>{o}</option>
+          ))}
+        </select>
+      </label>
+      <div className="form-actions">
+        <button
+          type="button"
+          className="button secondary"
+          onClick={() => {
+            setDraftBudget(0);
+            setDraftOccasion("Any occasion");
+          }}
+        >
+          Reset filters
+        </button>
+        <button className="button">Show matching places</button>
+      </div>
+    </form>
+  );
 }
 function Empty({
   icon,
@@ -2090,12 +2753,14 @@ function PlaceCard({
   onOpen,
   onSave,
   km,
+  coverPhoto,
 }: {
   place: Place;
   saved: boolean;
   onOpen: () => void;
   onSave: () => void;
   km?: number;
+  coverPhoto?: string;
 }) {
   return (
     <article className="place-card">
@@ -2105,11 +2770,7 @@ function PlaceCard({
           onClick={onOpen}
           aria-label={"Explore " + p.name}
         >
-          <img
-            src={p.image}
-            alt={"Illustrative " + p.category.toLowerCase() + " photograph"}
-            loading="lazy"
-          />
+          <PlaceCover place={p} photo={coverPhoto} />
         </button>
         <span className="place-category">{p.category}</span>
         <button
@@ -2123,6 +2784,7 @@ function PlaceCard({
       <div className="place-card-body">
         <div className="place-title-line">
           <button onClick={onOpen}>
+            {p.logo && !p.sample && <PlaceLogo place={p} />}
             <h3>{p.name}</h3>
           </button>
           {p.rating && (
@@ -2137,15 +2799,24 @@ function PlaceCard({
           {p.neighborhood}, {p.city}
         </p>
         <div className="place-meta">
-          <span>{money(p.budget)} / person</span>
           <span>
-            {km !== undefined
+            {p.budgetKnown === false
+              ? "Budget not listed"
+              : money(p.budget) + " / person"}
+          </span>
+          <span>
+            {km !== undefined && Number.isFinite(km)
               ? km.toFixed(1) + " km away"
               : p.rating
-                ? p.reviewCount + " reviews"
-                : "Sample place"}
+                ? (p.ratedReviewerCount ?? p.reviewCount) + " reviewers"
+                : p.sample
+                  ? "Sample place"
+                  : "No reviews yet"}
           </span>
         </div>
+        {p.locationStatus === "address_only" && (
+          <small>Address listed · map pin pending</small>
+        )}
         <span className="occasion-tag">{p.tags[0]}</span>
       </div>
     </article>
@@ -2179,6 +2850,7 @@ function ReviewCard({
   const [showComments, setShowComments] = useState(false);
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
+  const [deletePrompt, setDeletePrompt] = useState(false);
   return (
     <article className="review-card">
       <div className="review-author">
@@ -2236,7 +2908,9 @@ function ReviewCard({
             Visit supported
           </span>
         )}
-        {r.incentive && <span>Complimentary / incentivized visit</span>}
+        {r.incentive && (
+          <span>Incentivized visit · excluded from place score</span>
+        )}
         {r.hidden && (
           <span className="notice">Hidden by moderation · visible to you</span>
         )}
@@ -2255,9 +2929,7 @@ function ReviewCard({
             <>
               <button onClick={onEdit}>Edit</button>
               <button
-                onClick={() => {
-                  if (confirm("Delete this review and its photos?")) onDelete();
-                }}
+                onClick={() => setDeletePrompt(true)}
                 aria-label="Delete review"
               >
                 <Trash2 size={15} />
@@ -2271,6 +2943,26 @@ function ReviewCard({
           )}
         </div>
       </div>
+      {deletePrompt && (
+        <div className="review-delete-prompt" role="alert">
+          <p>Delete this review and its photos? This cannot be undone.</p>
+          <button
+            className="button secondary"
+            onClick={() => setDeletePrompt(false)}
+          >
+            Keep review
+          </button>
+          <button
+            className="button danger-button"
+            onClick={() => {
+              onDelete();
+              setDeletePrompt(false);
+            }}
+          >
+            Delete review permanently
+          </button>
+        </div>
+      )}
       {showComments && (
         <div className="comments">
           {r.comments.map((c) => (
@@ -2315,9 +3007,11 @@ function PlaceDetail({
   saved,
   onReview,
   onOuting,
+  onPost,
   me,
   onEdit,
   onReport,
+  coverPhoto,
 }: {
   place: Place;
   reviews: Review[];
@@ -2325,17 +3019,30 @@ function PlaceDetail({
   saved: boolean;
   onReview: () => void;
   onOuting: () => void;
+  onPost: () => void;
   me: User | null;
   onEdit: (r: Review) => void;
   onReport: (r: Review) => void;
+  coverPhoto?: string;
 }) {
+  const [reviewFilter, setReviewFilter] = useState("all");
+  const visibleReviews = [...reviews]
+    .filter(
+      (r) =>
+        reviewFilter === "all" ||
+        (reviewFilter === "supported"
+          ? r.supported
+          : !r.incentive && !r.demo && !r.hidden && r.visibility === "public"),
+    )
+    .sort(
+      (a, b) =>
+        b.visitDate.localeCompare(a.visitDate) || b.createdAt - a.createdAt,
+    );
   return (
     <div className="place-detail">
-      <img
-        className="detail-image"
-        src={p.image}
-        alt={"Illustrative " + p.category.toLowerCase() + " photograph"}
-      />
+      <div className="detail-image detail-photo-cover">
+        <PlaceCover place={p} photo={coverPhoto} />
+      </div>
       <div className="detail-info">
         <span className="detail-category">
           {p.category} · {p.neighborhood}
@@ -2353,7 +3060,9 @@ function PlaceDetail({
           </span>
           <span>
             <Utensils size={17} />
-            {money(p.budget)} estimated per person
+            {p.budgetKnown === false
+              ? "Budget not listed"
+              : money(p.budget) + " estimated per person"}
           </span>
         </div>
         <div className="detail-tags">
@@ -2361,7 +3070,180 @@ function PlaceDetail({
             <span key={t}>{t}</span>
           ))}
         </div>
+        {!p.sample && p.category === "Museum" && (
+          <section
+            className="place-menu"
+            aria-label="Museum admission and visiting"
+          >
+            <div>
+              <h3>Admission & visiting</h3>
+              <p>{p.admissionText || "Admission hasn’t been confirmed yet."}</p>
+              <small>
+                {p.admissionText
+                  ? p.admissionSource &&
+                    p.admissionSource !== p.museumDirectoryUrl
+                    ? "Reported on the museum website; confirm current admission, discounts and reservations."
+                    : "Reported by the directory; confirm current admission, discounts and reservations with the museum."
+                  : "Check visiting arrangements with the museum."}{" "}
+                You can still rate your visit.
+              </small>
+              {p.locationStatus === "address_only" && (
+                <p className="notice">
+                  The address is listed, but an exact map pin hasn’t been
+                  confirmed yet.
+                </p>
+              )}
+              {p.visitingNotice && (
+                <p className="notice" role="status">
+                  {p.visitingNotice}
+                </p>
+              )}
+            </div>
+            <div className="place-menu-links">
+              {p.website && p.websiteStatus !== "identity_unconfirmed" && (
+                <a
+                  className="button secondary"
+                  href={p.website}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Visit museum website <ChevronRight size={14} />
+                </a>
+              )}
+              {p.museumDirectoryUrl && (
+                <a
+                  className="text-button"
+                  href={p.museumDirectoryUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Philippine Museums listing
+                </a>
+              )}
+              {p.locationSource && (
+                <a
+                  className="text-button"
+                  href={p.locationSource}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Current address source
+                </a>
+              )}
+              {p.museumCheckedAt && (
+                <small>
+                  Directory checked{" "}
+                  {new Date(p.museumCheckedAt).toLocaleDateString("en-PH")}
+                </small>
+              )}
+              {p.admissionSource &&
+                p.admissionSource !== p.museumDirectoryUrl && (
+                  <a
+                    className="text-button"
+                    href={p.admissionSource}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Official admission source
+                  </a>
+                )}
+            </div>
+          </section>
+        )}
+        {!p.sample && p.category === "Cinema" && (
+          <section
+            className="place-menu"
+            aria-label="Cinema tickets and showtimes"
+          >
+            <div>
+              <h3>Tickets & showtimes</h3>
+              <p>
+                Check current films, schedules and ticket prices with the
+                cinema.
+              </p>
+              <small>
+                You can still rate your visit when ticket prices aren’t listed.
+              </small>
+            </div>
+            {p.website && p.websiteStatus !== "identity_unconfirmed" && (
+              <a
+                className="button secondary"
+                href={p.website}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Visit cinema website <ChevronRight size={14} />
+              </a>
+            )}
+          </section>
+        )}
+        {!p.sample &&
+          (p.category === "Restaurant" || p.category === "Café") && (
+            <section className="place-menu" aria-label="Menu and prices">
+              <div>
+                <h3>Philippine menu & prices</h3>
+                <p>
+                  {p.priceText || "Prices aren’t published in our sources yet."}
+                </p>
+                <small>
+                  {p.menuUrl
+                    ? p.menuStatus === "unavailable"
+                      ? "The published menu link couldn’t be reached."
+                      : p.menuStatus === "restricted"
+                        ? "The menu website limits automated checks. You can open it directly."
+                        : "Availability and prices can vary by branch."
+                    : p.menuUnavailableReason === "country_unconfirmed"
+                      ? "A Philippine menu hasn’t been confirmed for this place yet."
+                      : "No Philippine menu link is listed for this place yet."}{" "}
+                  You can still rate your visit.
+                </small>
+              </div>
+              <div className="place-menu-links">
+                {p.menuUrl &&
+                  p.menuCountry === "PH" &&
+                  p.menuStatus !== "unavailable" &&
+                  p.menuStatus !== "unverified" && (
+                    <a
+                      className="button secondary"
+                      href={p.menuUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <BookOpen size={16} />
+                      View menu
+                    </a>
+                  )}
+                {p.website &&
+                  p.websiteCountry === "PH" &&
+                  p.websiteStatus !== "identity_unconfirmed" && (
+                    <a
+                      className="text-button"
+                      href={p.website}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Visit website <ChevronRight size={14} />
+                    </a>
+                  )}
+                {p.priceSource && (
+                  <a
+                    className="text-button"
+                    href={p.priceSource}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Price source
+                  </a>
+                )}
+                {p.menuSource && <small>Menu source: {p.menuSource}</small>}
+              </div>
+            </section>
+          )}
         <div className="detail-actions">
+          <button className="button" onClick={onPost}>
+            <Camera size={17} />
+            Post photos here
+          </button>
           <button className="button" onClick={onReview}>
             <Plus size={17} />
             Write a review
@@ -2375,17 +3257,109 @@ function PlaceDetail({
             Add to an outing
           </button>
         </div>
+        {p.mapStatus === "unconfirmed" && (
+          <p className="notice" role="status">
+            This place was not found in the latest map scan. Check with the
+            business before visiting. Reviews and photo memories remain
+            available.
+          </p>
+        )}
         <p className="notice">
-          Fictional sample place. Location, hours, and spending are for preview
-          only.
+          {p.sample ? (
+            "Fictional sample place. Location, hours, and spending are for preview only."
+          ) : (
+            <>
+              Place details from{" "}
+              <a href={p.sourceUrl} target="_blank" rel="noreferrer">
+                {p.detailsSource === "Philippine Museums"
+                  ? "Philippine Museums directory"
+                  : "OpenStreetMap contributors"}
+              </a>
+              . Check opening hours before visiting.
+              {p.checkedAt && (
+                <>
+                  {" "}
+                  Last scanned{" "}
+                  {new Date(p.checkedAt).toLocaleDateString("en-PH")}.
+                </>
+              )}
+              {p.guideUrl && (
+                <>
+                  {" "}
+                  ·{" "}
+                  <a href={p.guideUrl} target="_blank" rel="noreferrer">
+                    Café Guide PH listing
+                  </a>{" "}
+                  (matched {p.guideCheckedAt})
+                </>
+              )}
+              {p.logoSource && (
+                <>
+                  {" "}
+                  ·{" "}
+                  <a href={p.logoSource} target="_blank" rel="noreferrer">
+                    Logo source
+                  </a>
+                </>
+              )}
+            </>
+          )}
         </p>
       </div>
       <div className="detail-reviews">
+        <section
+          className="rating-transparency"
+          aria-label="How this place is rated"
+        >
+          <div>
+            <strong>
+              {p.rating !== null
+                ? p.rating.toFixed(1) + " / 5"
+                : "No public score yet"}
+            </strong>
+            <span>
+              {p.ratedReviewerCount || 0} independent{" "}
+              {(p.ratedReviewerCount || 0) === 1 ? "reviewer" : "reviewers"} ·{" "}
+              {p.supportedReviewerCount || 0} with supported visits
+            </span>
+          </div>
+          {(p.ratedReviewerCount || 0) > 0 &&
+            (p.ratedReviewerCount || 0) < 5 && (
+              <p>
+                Early impressions · fewer than five people have rated this
+                place.
+              </p>
+            )}
+          <details>
+            <summary>How the score works</summary>
+            <p>
+              Each person counts once, using their latest public,
+              non-incentivized visit. Category scores are averaged equally.
+              Private, hidden, sample and incentivized reviews don’t affect the
+              score. Supported visits have evidence assessed by a moderator;
+              every opinion has equal weight. Repeat visits and companions from
+              the same outing don’t inflate trending activity.
+            </p>
+          </details>
+        </section>
         <h3>
           Experiences & impressions <span>{reviews.length}</span>
         </h3>
-        {reviews.length ? (
-          reviews.map((r) => (
+        <label className="review-filter">
+          Show experiences
+          <select
+            value={reviewFilter}
+            onChange={(e) => setReviewFilter(e.target.value)}
+          >
+            <option value="all">All visible experiences</option>
+            <option value="supported">Supported visits</option>
+            <option value="independent">
+              Public, non-incentivized experiences
+            </option>
+          </select>
+        </label>
+        {visibleReviews.length ? (
+          visibleReviews.map((r) => (
             <div className="detail-review" key={r.id}>
               <div className="review-author">
                 <div className="person-info">
@@ -2425,7 +3399,11 @@ function PlaceDetail({
                   Visit supported — opinion remains personal
                 </span>
               )}
-              {r.incentive && <p className="notice">Incentivized visit</p>}
+              {r.incentive && (
+                <p className="notice">
+                  Incentivized visit · excluded from place score
+                </p>
+              )}
               {r.author.id === me?.id ? (
                 <button className="text-button" onClick={() => onEdit(r)}>
                   Edit my experience
@@ -2441,26 +3419,28 @@ function PlaceDetail({
         ) : (
           <Empty
             icon={<MessageCircle />}
-            title="Be the first to share a little story."
-            text="A thoughtful review can make someone’s next outing better."
+            title={
+              reviewFilter === "all"
+                ? "Be the first to share a little story."
+                : "No experiences match this filter yet."
+            }
+            text={
+              reviewFilter === "all"
+                ? "A thoughtful review can make someone’s next outing better."
+                : "Choose all experiences to see the other stories."
+            }
           />
         )}
       </div>
     </div>
   );
 }
-function AuthForm({
-  onSuccess,
-  onPrivacy,
-  onTerms,
-}: {
-  onSuccess: () => Promise<void>;
-  onPrivacy: () => void;
-  onTerms: () => void;
-}) {
+function AuthForm({ onSuccess }: { onSuccess: () => Promise<void> }) {
   const [mode, setMode] = useState("signup");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   return (
     <>
       <div className="auth-welcome">
@@ -2556,7 +3536,7 @@ function AuthForm({
           Password
           <input
             name="password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             autoComplete={
               mode === "signup" ? "new-password" : "current-password"
             }
@@ -2568,6 +3548,14 @@ function AuthForm({
             }
           />
         </label>
+        <button
+          type="button"
+          className="text-button password-toggle"
+          aria-pressed={showPassword}
+          onClick={() => setShowPassword((v) => !v)}
+        >
+          {showPassword ? "Hide password" : "Show password"}
+        </button>
         {mode === "signup" && (
           <>
             <label className="check-label">
@@ -2578,14 +3566,18 @@ function AuthForm({
               <input name="terms" type="checkbox" required />
               <span>
                 I agree to the{" "}
-                <button type="button" className="inline-link" onClick={onTerms}>
+                <button
+                  type="button"
+                  className="inline-link"
+                  onClick={() => setLegal("terms")}
+                >
                   pilot terms
                 </button>{" "}
                 and{" "}
                 <button
                   type="button"
                   className="inline-link"
-                  onClick={onPrivacy}
+                  onClick={() => setLegal("privacy")}
                 >
                   privacy notice
                 </button>
@@ -2593,6 +3585,19 @@ function AuthForm({
               </span>
             </label>
           </>
+        )}
+        {legal && (
+          <section className="inline-legal">
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => setLegal(null)}
+            >
+              <X size={16} />
+              Close {legal === "terms" ? "terms" : "privacy notice"}
+            </button>
+            {legal === "terms" ? <TermsContent /> : <TrustContent />}
+          </section>
         )}
         {error && (
           <p className="form-error" role="alert">
@@ -2710,7 +3715,10 @@ function ReviewForm({
           title: f.get("title"),
           body: f.get("body"),
           visitDate: f.get("date"),
-          spending: Number(f.get("spending")),
+          spending:
+            String(f.get("spending") || "").trim() === ""
+              ? null
+              : Number(f.get("spending")),
           ratings,
           visibility,
           incentive: f.get("incentive") === "on",
@@ -2724,23 +3732,16 @@ function ReviewForm({
         and what could be better.
       </p>
       <div className="form-grid">
-        <label>
-          Where did you go?
-          <select
-            value={placeId}
-            disabled={!!review}
-            onChange={(e) => {
-              setPlaceId(e.target.value);
-              setRatings({});
-            }}
-          >
-            {places.map((p) => (
-              <option value={p.id} key={p.id}>
-                {p.name} · {p.category}
-              </option>
-            ))}
-          </select>
-        </label>
+        <PlaceSelect
+          places={places}
+          value={placeId}
+          disabled={!!review}
+          onChange={(id) => {
+            setPlaceId(id);
+            setRatings({});
+          }}
+          label="Where did you go?"
+        />
         <label>
           Date of your visit
           <input
@@ -2749,9 +3750,9 @@ function ReviewForm({
             defaultValue={
               review?.visitDate ||
               initialDate ||
-              new Date().toISOString().slice(0, 10)
+              philippineDate()
             }
-            max={new Date().toISOString().slice(0, 10)}
+            max={philippineDate()}
             required
           />
         </label>
@@ -2770,6 +3771,7 @@ function ReviewForm({
                   onClick={() => setRatings((s) => ({ ...s, [k]: n }))}
                   aria-label={k + " " + n + " star" + (n > 1 ? "s" : "")}
                   aria-pressed={ratings[k] === n}
+                  data-form-change
                 >
                   <Star
                     size={24}
@@ -2806,15 +3808,22 @@ function ReviewForm({
       </label>
       <div className="form-grid">
         <label>
-          Spent per person (₱)
+          Spent per person (₱, optional)
           <input
+            key={placeId}
             name="spending"
             type="number"
             min={0}
             max={100000}
-            defaultValue={review?.spending || p.budget}
-            required
+            defaultValue={
+              review
+                ? (review.spending ?? "")
+                : p.budgetKnown === false
+                  ? ""
+                  : p.budget
+            }
           />
+          <small>You can rate your visit without a menu or price.</small>
         </label>
         <VisibilitySelect value={visibility} onChange={setVisibility} />
       </div>
@@ -2923,18 +3932,35 @@ function ReviewForm({
 function OutingForm({
   places,
   initialPlace,
+  outing,
+  existingOutings,
+  onSelectExisting,
   onSubmit,
   pending,
 }: {
   places: Place[];
   initialPlace?: Place;
+  outing?: Outing;
+  existingOutings: Outing[];
+  onSelectExisting: (outing: Outing) => void;
   onSubmit: (body: unknown) => Promise<void>;
   pending: boolean;
 }) {
   const [stops, setStops] = useState<string[]>(
-    initialPlace ? [initialPlace.id] : [],
+    outing
+      ? [
+          ...new Set([
+            ...outing.stops,
+            ...(initialPlace ? [initialPlace.id] : []),
+          ]),
+        ]
+      : initialPlace
+        ? [initialPlace.id]
+        : [],
   );
-  const [visibility, setVisibility] = useState<Visibility>("private");
+  const [visibility, setVisibility] = useState<Visibility>(
+    outing?.visibility || "private",
+  );
   const [selected, setSelected] = useState(places[0]?.id || "");
   return (
     <form
@@ -2959,11 +3985,45 @@ function OutingForm({
         A couple of stops, a little room to wander, and people you enjoy. Start
         with a simple plan.
       </p>
+      {!outing && initialPlace && existingOutings.length > 0 && (
+        <div className="existing-outings">
+          <h3>Add {initialPlace.name} to a plan</h3>
+          {existingOutings
+            .filter(
+              (o) => !o.stops.includes(initialPlace.id) && o.stops.length < 10,
+            )
+            .map((o) => (
+              <button
+                type="button"
+                className="collection-option"
+                key={o.id}
+                onClick={() => onSelectExisting(o)}
+              >
+                <CalendarDays size={18} />
+                <span>
+                  <strong>{o.title}</strong>
+                  <small>
+                    {formatDate(o.date)} · {o.stops.length} stops
+                  </small>
+                </span>
+                <Plus size={18} />
+              </button>
+            ))}
+          <p className="form-help">Or create a new outing below.</p>
+        </div>
+      )}
+      {outing && (
+        <p className="notice">
+          Existing invitations and each companion’s consent stay in place. Add
+          new invitees below.
+        </p>
+      )}
       <div className="form-grid">
         <label>
           Give your day a name
           <input
             name="title"
+            defaultValue={outing?.title}
             placeholder="A slow Saturday in the city"
             minLength={3}
             maxLength={100}
@@ -2975,30 +4035,23 @@ function OutingForm({
           <input
             name="date"
             type="date"
-            defaultValue={new Date().toISOString().slice(0, 10)}
+            defaultValue={outing?.date || philippineDate()}
             required
           />
         </label>
       </div>
       <div className="stop-picker">
-        <label>
-          Add a place
-          <select
-            aria-label="Add a place"
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-          >
-            {places.map((p) => (
-              <option value={p.id} key={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <PlaceSelect
+          places={places}
+          value={selected}
+          onChange={setSelected}
+          label="Add a place"
+        />
         <button
           type="button"
           className="button secondary"
-          disabled={stops.includes(selected) || stops.length >= 10}
+          disabled={!selected || stops.includes(selected) || stops.length >= 10}
+          data-form-change
           onClick={() => setStops((s) => [...s, selected])}
         >
           <Plus size={17} />
@@ -3020,6 +4073,7 @@ function OutingForm({
                 className="icon-button"
                 disabled={i === 0}
                 aria-label="Move stop up"
+                data-form-change
                 onClick={() =>
                   setStops((s) => {
                     const a = [...s];
@@ -3035,6 +4089,7 @@ function OutingForm({
                 className="icon-button"
                 disabled={i === stops.length - 1}
                 aria-label="Move stop down"
+                data-form-change
                 onClick={() =>
                   setStops((s) => {
                     const a = [...s];
@@ -3049,6 +4104,7 @@ function OutingForm({
                 type="button"
                 className="icon-button"
                 aria-label="Remove stop"
+                data-form-change
                 onClick={() => setStops((s) => s.filter((p) => p !== pid))}
               >
                 <X size={15} />
@@ -3057,6 +4113,32 @@ function OutingForm({
           </li>
         ))}
       </ol>
+      {!!stops.length && (
+        <p className="itinerary-total">
+          <span>
+            {stops.length} {stops.length === 1 ? "stop" : "stops"} · Estimated
+            per person
+            {stops.some(
+              (id) => places.find((p) => p.id === id)?.budgetKnown === false,
+            )
+              ? " · Some prices unlisted"
+              : ""}
+          </span>
+          <strong>
+            {stops.every(
+              (id) => places.find((p) => p.id === id)?.budgetKnown === false,
+            )
+              ? "Not listed"
+              : money(
+                  stops.reduce(
+                    (total, id) =>
+                      total + (places.find((p) => p.id === id)?.budget || 0),
+                    0,
+                  ),
+                )}
+          </strong>
+        </p>
+      )}
       {!stops.length && (
         <p className="form-help">
           Add at least one place to start your itinerary.
@@ -3074,6 +4156,7 @@ function OutingForm({
         A note for the day
         <textarea
           name="notes"
+          defaultValue={outing?.notes}
           placeholder="Meet after lunch. Leave room for dessert."
           maxLength={2000}
           rows={3}
@@ -3085,7 +4168,11 @@ function OutingForm({
         Each companion chooses who can see their own association.
       </p>
       <button className="button full-width" disabled={pending || !stops.length}>
-        {pending ? "Putting your plan together…" : "Create my outing"}
+        {pending
+          ? "Saving your plan…"
+          : outing
+            ? "Save changes to outing"
+            : "Create my outing"}
       </button>
     </form>
   );
@@ -3098,6 +4185,9 @@ function SimpleForm({
   pending,
   multiline = false,
   password = false,
+  initialValue = "",
+  minLength = 1,
+  maxLength = 128,
 }: {
   label: string;
   placeholder?: string;
@@ -3106,8 +4196,11 @@ function SimpleForm({
   pending: boolean;
   multiline?: boolean;
   password?: boolean;
+  initialValue?: string;
+  minLength?: number;
+  maxLength?: number;
 }) {
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(initialValue);
   return (
     <form
       className="form-stack"
@@ -3134,7 +4227,8 @@ function SimpleForm({
             onChange={(e) => setValue(e.target.value)}
             placeholder={placeholder}
             required
-            maxLength={128}
+            minLength={minLength}
+            maxLength={maxLength}
           />
         )}
       </label>
@@ -3192,11 +4286,9 @@ function ProfileForm({
       <label>
         Your city
         <select name="city" defaultValue={me.city}>
-          {["Metro Manila", "Makati", "Taguig", "Manila", "Quezon City"].map(
-            (c) => (
-              <option key={c}>{c}</option>
-            ),
-          )}
+          {["Metro Manila", ...METRO_CITIES].map((c) => (
+            <option key={c}>{c}</option>
+          ))}
         </select>
       </label>
       <button className="button" disabled={pending}>
@@ -3208,15 +4300,19 @@ function ProfileForm({
 function Notifications({
   data,
   onAction,
+  pending,
+  onView,
 }: {
   data: Bootstrap;
+  pending: boolean;
+  onView: () => void;
   onAction: (
     id: string,
     status: string,
     visibility: Visibility,
   ) => Promise<void>;
 }) {
-  const [consent, setConsent] = useState<Visibility>("private");
+  const [consents, setConsents] = useState<Record<string, Visibility>>({});
   return (
     <div className="notifications-list">
       {!data.invitations.length ? (
@@ -3231,27 +4327,52 @@ function Notifications({
             Being invited never makes your identity public. Choose your
             visibility before accepting.
           </p>
-          <VisibilitySelect
-            value={consent}
-            onChange={setConsent}
-            label="Who can see my association with accepted outings?"
-          />
           {data.invitations.map((i) => (
             <div className="invitation" key={i.id}>
               <CalendarDays size={24} />
               <div>
                 <strong>{i.title}</strong>
                 <p>{i.from} invited you to join.</p>
+                <p className="invitation-date">
+                  <CalendarDays size={14} />
+                  {formatDate(i.date)} · {i.stops.length}{" "}
+                  {i.stops.length === 1 ? "stop" : "stops"}
+                </p>
+                {i.notes && <p>{i.notes}</p>}
+                <ol className="invitation-stops">
+                  {i.stops.map((id) => (
+                    <li key={id}>
+                      {data.places.find((p) => p.id === id)?.name}
+                    </li>
+                  ))}
+                </ol>
+                <div className="form-stack">
+                  <VisibilitySelect
+                    value={consents[i.id] || i.visibility || "private"}
+                    onChange={(value) =>
+                      setConsents((s) => ({ ...s, [i.id]: value }))
+                    }
+                    label={"Who can see my association with " + i.title + "?"}
+                  />
+                </div>
                 {i.status === "pending" ? (
                   <div>
                     <button
                       className="button"
-                      onClick={() => onAction(i.id, "accepted", consent)}
+                      disabled={pending}
+                      onClick={() =>
+                        onAction(
+                          i.id,
+                          "accepted",
+                          consents[i.id] || i.visibility || "private",
+                        )
+                      }
                     >
                       Accept
                     </button>
                     <button
                       className="button secondary"
+                      disabled={pending}
                       onClick={() => onAction(i.id, "declined", "private")}
                     >
                       Decline
@@ -3261,21 +4382,35 @@ function Notifications({
                   <>
                     <span className="supported">
                       <Check size={15} />
-                      Accepted
+                      Accepted · {i.visibility}
                     </span>
                     <button
                       className="text-button"
-                      onClick={() => onAction(i.id, "accepted", consent)}
+                      disabled={pending}
+                      onClick={() =>
+                        onAction(
+                          i.id,
+                          "accepted",
+                          consents[i.id] || i.visibility || "private",
+                        )
+                      }
                     >
                       Update my visibility
                     </button>
                     <button
                       className="text-button"
+                      disabled={pending}
                       onClick={() => onAction(i.id, "declined", "private")}
                     >
                       Leave outing
                     </button>
                   </>
+                )}
+                {i.status === "accepted" && (
+                  <button className="text-button" onClick={onView}>
+                    View my outings
+                    <ChevronRight size={16} />
+                  </button>
                 )}
               </div>
             </div>
@@ -3297,10 +4432,12 @@ function TrustContent() {
       </div>
       <h3>Your stories, your audience</h3>
       <p>
-        Choose public, followers-only, or private for each review and outing.
-        Saved collections are private. Your email, password, and device
-        coordinates never appear in public content. Location permission is
-        optional; city search always works.
+        Choose public, followers-only, or private for each photo post, review
+        and outing. Saved collections are private. Your email, password, and
+        device coordinates never appear in public content. Location permission
+        is optional; city search always works. Near me sends an approximate
+        search area to the map provider. Uploaded photos have location metadata
+        removed.
       </p>
       <h3>Consent comes before company</h3>
       <p>
@@ -3319,7 +4456,10 @@ function TrustContent() {
       <p>
         A Visit Supported indicator means a moderator assessed the evidence, not
         that Dated verified a subjective opinion. Complimentary or incentivized
-        visits must be disclosed. Sample stories are excluded from venue scores.
+        visits must be disclosed and are excluded from venue scores. Each person
+        counts once using their latest public, non-incentivized visit. Private,
+        hidden and sample stories are also excluded. Evidence support does not
+        give an opinion more weight.
       </p>
       <h3>A place for thoughtful disagreement</h3>
       <p>
@@ -3351,9 +4491,10 @@ function TermsContent() {
     <div className="legal-content">
       <p>
         These terms cover the local Dated pilot, for adults aged 18 and over.
-        The directory contains fictional sample places, indicative spending, and
-        illustrative photographs. Sample content is not advice about a real
-        establishment.
+        The directory includes labeled fictional sample places and real
+        restaurant listings from OpenStreetMap contributors. Sample photographs
+        are illustrative. Missing hours and prices are shown as unlisted;
+        confirm details with the business before visiting.
       </p>
       <h3>Share your own experiences</h3>
       <p>
@@ -3378,9 +4519,11 @@ function TermsContent() {
       <h3>Pilot limitations</h3>
       <p>
         The pilot is provided for evaluation. Venue information, map locations,
-        and sample stories must be replaced with curated, verified content
-        before launch. No payment service, reservations, or Premium subscription
-        is active.
+        and community coverage can be incomplete. No payment service,
+        reservations, or paid Premium subscription is active. The Premium
+        itinerary designer is available as a free preview. Share links expose
+        the chosen itinerary to anyone with the link until the host turns it
+        off.
       </p>
     </div>
   );
