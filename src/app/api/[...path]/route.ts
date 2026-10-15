@@ -42,6 +42,11 @@ import { discover } from "@/server/discovery";
 import { catalogStatus, initializeCatalog } from "@/lib/place-catalog.mjs";
 import { refreshCatalog } from "@/server/catalog";
 import { itineraryRequest } from "@/server/itineraries";
+import { commerce, commerceRequest } from "@/server/commerce";
+import { CommerceError } from "@/lib/commerce-core.mjs";
+import { criteriaVersion } from "@/lib/review-criteria.mjs";
+import { planningRequest } from "@/server/planning";
+import { collectionSharingRequest } from "@/server/collection-sharing";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const json = (data: unknown, status = 200) =>
@@ -67,6 +72,12 @@ async function handle(req: NextRequest, ctx: Context) {
     )
       fail(413, "Keep each upload under 4 MB.");
     if (method === "GET" && path === "bootstrap") return json(bootstrap(me));
+    const commercial = await commerceRequest(req, parts);
+    if (commercial) return commercial;
+    const planning = await planningRequest(req, parts);
+    if (planning) return planning;
+    const collectionShare = await collectionSharingRequest(req, parts);
+    if (collectionShare) return collectionShare;
     const itinerary = await itineraryRequest(req, parts);
     if (itinerary) return itinerary;
     if (method === "GET" && path === "catalog") return json(catalogStatus(db));
@@ -380,7 +391,10 @@ async function handle(req: NextRequest, ctx: Context) {
           user.id,
         ),
         outings: rows("SELECT * FROM outings WHERE owner_id=?", user.id),
-        itineraryDesigns: rows("SELECT d.* FROM itinerary_designs d JOIN outings o ON o.id=d.outing_id WHERE o.owner_id=?", user.id),
+        itineraryDesigns: rows(
+          "SELECT d.* FROM itinerary_designs d JOIN outings o ON o.id=d.outing_id WHERE o.owner_id=?",
+          user.id,
+        ),
         invitations: rows("SELECT * FROM invitations WHERE user_id=?", user.id),
         comments: rows("SELECT * FROM comments WHERE author_id=?", user.id),
         follows: rows(
@@ -389,6 +403,7 @@ async function handle(req: NextRequest, ctx: Context) {
         ),
         reports: rows("SELECT * FROM reports WHERE reporter_id=?", user.id),
         appeals: rows("SELECT * FROM appeals WHERE author_id=?", user.id),
+        commerce: commerce.exportAccount(user),
       });
     if (method === "DELETE" && path === "account") {
       const input = z
@@ -401,6 +416,7 @@ async function handle(req: NextRequest, ctx: Context) {
       )
         fail(401, "Confirm your password to delete this account.");
       const media = rows("SELECT file FROM media WHERE owner_id=?", user.id);
+      commerce.canDelete(user);
       db.prepare("DELETE FROM users WHERE id=?").run(user.id);
       for (const m of media) {
         try {
@@ -496,11 +512,13 @@ async function handle(req: NextRequest, ctx: Context) {
         db.prepare(
           "DELETE FROM collection_items WHERE collection_id=? AND place_id=?",
         ).run(collectionId, placeId);
-      else
+      else {
         db.prepare("INSERT INTO collection_items VALUES(?,?)").run(
           collectionId,
           placeId,
         );
+        commerce.event(user, { placeId, kind: "save", session: user.id });
+      }
       return json({ saved: !existing });
     }
     if (method === "DELETE" && parts[0] === "collections" && parts[1]) {
@@ -564,8 +582,14 @@ async function handle(req: NextRequest, ctx: Context) {
       limit("reviews:" + user.id, 15, 3600000);
       const input = reviewSchema.parse(await req.json());
       const place = placeById(input.placeId);
-      if (!place || !validCriteria(place.category, input.ratings))
-        fail(400, "Rate every category for this type of place.");
+      if (
+        !place ||
+        !validCriteria(place.category, input.ratings, input.notApplicable)
+      )
+        fail(
+          400,
+          "Score each criterion or choose Not applicable. At least one score is needed.",
+        );
       const reviewId = method === "PATCH" ? parts[1] : id();
       const previous =
         method === "PATCH"
@@ -681,6 +705,16 @@ async function handle(req: NextRequest, ctx: Context) {
         db.prepare(
           "UPDATE reviews SET outing_id=?,spending_known=? WHERE id=?",
         ).run(input.outingId || null, +(input.spending !== null), reviewId);
+        db.prepare(
+          "UPDATE reviews SET criteria_version=?,not_applicable=?,reward_opt_in=? WHERE id=?",
+        ).run(
+          criteriaVersion(place.category, input.ratings, input.notApplicable),
+          JSON.stringify(input.notApplicable),
+          +input.rewardOptIn,
+          reviewId,
+        );
+        commerce.requestReward(user, reviewId);
+        db.prepare("UPDATE reviews SET business_relationship=? WHERE id=?").run(+commerce.isBusinessReviewer(user.id,input.placeId),reviewId);
       });
       return json({ id: reviewId }, previous ? 200 : 201);
     }
@@ -831,10 +865,7 @@ async function handle(req: NextRequest, ctx: Context) {
       if (Object.keys(body).length === 1 && "completed" in body) {
         const input = z.object({ completed: z.boolean() }).parse(body);
         const outing = row("SELECT date FROM outings WHERE id=?", parts[1]);
-        if (
-          input.completed &&
-          String(outing?.date) > philippineDate()
-        )
+        if (input.completed && String(outing?.date) > philippineDate())
           fail(
             400,
             "This outing is still in the future. Update its date before marking it visited.",
@@ -1006,6 +1037,7 @@ async function handle(req: NextRequest, ctx: Context) {
     }
     fail(404, "This action is not available.");
   } catch (e) {
+    if (e instanceof CommerceError) return json({ error: e.message }, e.status);
     if (e instanceof HttpError) return json({ error: e.message }, e.status);
     if (e instanceof z.ZodError)
       return json(

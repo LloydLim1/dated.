@@ -5,5 +5,7 @@ export async function register() {
   ) {
     const { startWeeklyRefresh } = await import("./server/catalog");
     startWeeklyRefresh();
+    const { startCommerceWorker } = await import("./server/commerce-worker");
+    startCommerceWorker();
   }
 }

@@ -45,6 +45,7 @@ export type Place = {
   budget: number;
   tags: string[];
   rating: number | null;
+  criteria?: Record<string, { average: number; count: number }>;
   reviewCount: number;
   ratedReviewerCount?: number;
   supportedReviewerCount?: number;
@@ -55,6 +56,8 @@ export type Place = {
   logo?: string;
   logoSource?: string;
   budgetKnown?: boolean;
+  budgetSource?: "owner";
+  ownerUpdatedAt?: number;
   brandId?: string;
   brandName?: string;
   website?: string;
@@ -105,9 +108,14 @@ export type Review = {
   body: string;
   visitDate: string;
   ratings: Record<string, number>;
+  criteriaVersion?: number;
+  notApplicable?: string[];
+  rewardOptIn?: boolean;
+  rewardStatus?: string;
   spending: number | null;
   visibility: Visibility;
   incentive: boolean;
+  businessRelationship?: boolean;
   supported: boolean;
   media: string[];
   evidence?: string;
@@ -118,7 +126,7 @@ export type Review = {
   demo: boolean;
   hidden: boolean;
 };
-export type Collection = { id: string; name: string; placeIds: string[] };
+export type Collection = { id: string; name: string; placeIds: string[]; shareToken?: string };
 export type Outing = {
   id: string;
   owner: User;
@@ -172,12 +180,7 @@ export type Bootstrap = {
     error?: string;
   };
 };
-export const CRITERIA: Record<Category, string[]> = {
-  Café: ["Coffee & drinks", "Atmosphere", "Service", "Value"],
-  Restaurant: ["Food", "Atmosphere", "Service", "Value"],
-  Museum: ["Exhibits", "Accessibility", "Experience", "Value"],
-  Cinema: ["Picture & sound", "Comfort", "Cleanliness", "Value"],
-};
+export { CRITERIA, LEGACY_CRITERIA } from "./review-criteria.mjs";
 export const money = (n: number) =>
   new Intl.NumberFormat("en-PH", {
     style: "currency",

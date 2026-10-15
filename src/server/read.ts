@@ -1,7 +1,7 @@
 import { db, rows, row, type Row } from "./db";
 import { canSee, publicUser } from "./auth";
 import { catalogStatus } from "@/lib/place-catalog.mjs";
-import { reviewSummary } from "@/lib/review-credibility.mjs";
+import { reviewSummary, criterionSummary } from "@/lib/review-credibility.mjs";
 import {
   type User,
   type Review,
@@ -17,24 +17,27 @@ export const userById = (id: string) => {
 };
 export const placeById = (id: string): Place | null => {
   const r = row("SELECT * FROM places WHERE id=?", id);
-  return r ? JSON.parse(String(r.data)) : null;
+  if(!r)return null;
+  const place:Place=JSON.parse(String(r.data));
+  const details=row("SELECT d.* FROM business_place_details d JOIN business_branches b ON b.place_id=d.place_id AND b.org_id=d.org_id WHERE d.place_id=?",id);
+  return details?{...place,hours:String(details.hours||place.hours),description:String(details.description||place.description),...(details.budget===null?{}:{budget:Number(details.budget),budgetKnown:true,budgetSource:"owner" as const}),tags:JSON.parse(String(details.tags)),ownerUpdatedAt:Number(details.updated_at)}:place;
 };
-const summarizeReviews = (all: Row[]) =>
-  reviewSummary(
-    all.map((r) => ({
-      id: String(r.id),
-      authorId: String(r.author_id),
-      visitDate: String(r.visit_date),
-      createdAt: Number(r.created_at),
-      ratings: JSON.parse(String(r.ratings)),
-      visibility: String(r.visibility),
-      hidden: !!r.hidden,
-      demo: !!r.demo,
-      incentive: !!r.incentive,
-      supported: !!r.supported,
-      outingId: r.outing_id ? String(r.outing_id) : undefined,
-    })),
-  );
+const summarizeReviews = (all: Row[]) => {
+  const reviews = all.map((r) => ({
+    id: String(r.id),
+    authorId: String(r.author_id),
+    visitDate: String(r.visit_date),
+    createdAt: Number(r.created_at),
+    ratings: JSON.parse(String(r.ratings)),
+    visibility: String(r.visibility),
+    hidden: !!r.hidden,
+    demo: !!r.demo,
+    incentive: !!r.incentive || !!r.business_relationship,
+    supported: !!r.supported,
+    outingId: r.outing_id ? String(r.outing_id) : undefined,
+  }));
+  return { ...reviewSummary(reviews), criteria: criterionSummary(reviews) };
+};
 export const ratedPlaceById = (id: string): Place | null => {
   const place = placeById(id);
   return place
@@ -64,9 +67,17 @@ export function serializeReview(r: Row, me: User | null): Review {
     body: String(r.body),
     visitDate: String(r.visit_date),
     ratings: JSON.parse(String(r.ratings)),
+    criteriaVersion: Number(r.criteria_version || 1),
+    notApplicable: JSON.parse(String(r.not_applicable || "[]")),
+    rewardOptIn: !!r.reward_opt_in,
+    rewardStatus: row(
+      "SELECT status FROM reward_claims WHERE review_id=?",
+      String(r.id),
+    )?.status as string | undefined,
     spending: r.spending_known === 0 ? null : Number(r.spending),
     visibility: r.visibility as Review["visibility"],
     incentive: !!r.incentive,
+    businessRelationship: !!r.business_relationship,
     supported: !!r.supported,
     hidden: !!r.hidden,
     media: rows(
@@ -172,6 +183,7 @@ export function getPosts(me: User | null): PhotoPost[] {
     }));
 }
 export function getPlaces(): Place[] {
+  const details=new Map(rows("SELECT d.* FROM business_place_details d JOIN business_branches b ON b.place_id=d.place_id AND b.org_id=d.org_id").map(d=>[String(d.place_id),d]));
   const grouped = new Map<string, Row[]>();
   for (const review of rows(
     "SELECT * FROM reviews WHERE visibility='public' AND hidden=0 AND demo=0 ORDER BY created_at ASC",
@@ -183,9 +195,11 @@ export function getPlaces(): Place[] {
   }
   return rows("SELECT data FROM places").map((r) => {
     const p: Place = JSON.parse(String(r.data));
+    const detail=details.get(p.id);
     const all = grouped.get(p.id) || [];
     return {
       ...p,
+      ...(detail?{hours:String(detail.hours||p.hours),description:String(detail.description||p.description),...(detail.budget===null?{}:{budget:Number(detail.budget),budgetKnown:true,budgetSource:"owner" as const}),tags:JSON.parse(String(detail.tags)),ownerUpdatedAt:Number(detail.updated_at)}:{}),
       ...summarizeReviews(all),
     };
   });
@@ -195,6 +209,7 @@ export function getCollections(me: User | null): Collection[] {
     ? rows("SELECT * FROM collections WHERE owner_id=?", me.id).map((r) => ({
         id: String(r.id),
         name: String(r.name),
+        shareToken: row("SELECT token FROM collection_shares WHERE collection_id=?", String(r.id))?.token as string | undefined,
         placeIds: rows(
           "SELECT place_id FROM collection_items WHERE collection_id=?",
           String(r.id),

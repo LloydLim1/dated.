@@ -2,6 +2,7 @@ import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { publicResource } from "./public-resource.mjs";
+import { fetchOverpassData } from "./overpass-source.mjs";
 import {
   WEEK,
   CITIES,
@@ -387,7 +388,7 @@ export async function syncMuseums(
   });
   db.exec("COMMIT");
   try {
-    let records;
+    let records, sourceEndpoint;
     if (source)
       records = source.records.map((r) =>
         r.html ? parseMuseumDetail(r.html, r.url, r.id) : r,
@@ -479,20 +480,22 @@ export async function syncMuseums(
       }
     }
     if (!osmSource) {
-      const url = new URL(
-        process.env.DATED_OVERPASS_URL ||
-          "https://overpass-api.de/api/interpreter",
-      );
-      url.searchParams.set(
-        "data",
+      const result = await fetchOverpassData(
         '[out:json][timeout:60];area["ISO3166-2"="PH-00"]->.metro;.metro out tags;nwr["tourism"~"^(museum|gallery)$"](area.metro);out center tags;rel(area.metro)["boundary"="administrative"]["admin_level"="6"];out geom;',
+        {
+          fetcher,
+          timeout: 90000,
+          progress,
+          userAgent: "Dated/1.0 (Metro Manila museum updates)",
+          validate(data) {
+            if (!data.elements.some((e) => e.tags?.tourism === "museum"))
+              throw new Error("Incomplete museum map response.");
+            boundaries(data.elements);
+          },
+        },
       );
-      const response = await fetcher(url, {
-        signal: AbortSignal.timeout(90000),
-        headers: { "User-Agent": "Dated/1.0 (Metro Manila museum updates)" },
-      });
-      if (!response.ok) throw new Error("Museum map source unavailable");
-      osmSource = await response.json();
+      osmSource = result.data;
+      sourceEndpoint = result.endpoint;
     }
     if (
       !Array.isArray(osmSource.elements) ||
@@ -566,6 +569,7 @@ export async function syncMuseums(
       lastSuccess: now,
       nextDue: now + WEEK,
       sourceUrl: ROOT + "/museums/",
+      ...(sourceEndpoint ? { sourceEndpoint } : {}),
       unconfirmed: missing.length,
     };
     save(db, state);

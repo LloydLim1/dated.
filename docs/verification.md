@@ -1,3 +1,9 @@
+# Revised local platform — 15 October 2026
+
+The revised customer/business implementation passes 20 browser/API journeys, 52 domain/catalog tests, TypeScript, ESLint and the optimized Next.js build. Coverage includes customer coins and vouchers, staff redemption, owner subscriptions/reports/ads, group planning, revocable collection snapshots, restored search filters and Google Street View links. Automated WCAG A/AA scans of the new report and mobile wallet screens found no violations. See [implementation details and limits](revised-platform-implementation.md) and [screenshots](frontend/revised-platform/).
+
+Live hosted identity/email, online payments and an embedded Google panorama were not connected; the user chose local implementation without provider projects. The original verification history follows.
+
 # Photo covers, Premium preview and review transparency — 10 October 2026
 
 Location cards and place pages now use full-width photographs. Only verified business logos appear beside venue names; unverified venues have no initials or substitute symbols. Public journal photographs take precedence; fallback photographs are explicitly labeled illustrative. Private and followers-only posts never become directory covers. The H Proper card from the user's screenshot was checked at 1,440 and 390 pixels; the photograph fills the entire cover, and the card/detail views have no recorded automated WCAG A/AA violations, horizontal overflow or runtime errors. See [photo-cover results](frontend/photo-cover-verification.json).

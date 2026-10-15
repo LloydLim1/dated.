@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import sharp from "sharp";
+import { fetchOverpassData } from "./overpass-source.mjs";
 import {
   publicResource,
   publishedMenuPrices,
@@ -572,7 +573,11 @@ async function fetchJson(url, fetcher, timeout = 30000) {
         "Dated/1.0 (Metro Manila restaurant directory; local pilot)",
     },
   });
-  if (!r.ok) throw new Error(`Source returned HTTP ${r.status}`);
+  if (!r.ok) {
+    const error = new Error(`Source returned HTTP ${r.status}`);
+    error.status = r.status;
+    throw error;
+  }
   return r.json();
 }
 export async function loadBrandIndex(
@@ -826,14 +831,25 @@ export async function syncMetro(
   saveStatus(db, state);
   db.exec("COMMIT");
   try {
-    let payload = source;
+    let payload = source,
+      sourceEndpoint;
     if (!payload) {
-      const endpoint = new URL(
-        process.env.DATED_OVERPASS_URL ||
-          "https://overpass-api.de/api/interpreter",
-      );
-      endpoint.searchParams.set("data", metroOverpassQuery());
-      payload = await fetchJson(endpoint, fetcher, 150000);
+      const result = await fetchOverpassData(metroOverpassQuery(), {
+        fetcher,
+        timeout: 150000,
+        progress,
+        userAgent:
+          "Dated/1.0 (Metro Manila restaurant directory; local pilot)",
+        validate(data) {
+          if (
+            !data.elements.some((e) => e.tags?.["ISO3166-2"] === "PH-00")
+          )
+            throw new Error("Incomplete Metro Manila response.");
+          boundaries(data.elements);
+        },
+      });
+      payload = result.data;
+      sourceEndpoint = result.endpoint;
     }
     if (
       !Array.isArray(payload.elements) ||
@@ -908,6 +924,7 @@ export async function syncMetro(
       changed: listingChanges.changed + changes.changed,
       ...availability,
       sourceTimestamp: payload.osm3s?.timestamp_osm_base || null,
+      ...(sourceEndpoint ? { sourceEndpoint } : {}),
       refresh: "weekly",
     };
     saveStatus(db, result);

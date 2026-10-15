@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CRITERIA } from "@/lib/types";
+import { criteriaVersion } from "@/lib/review-criteria.mjs";
 import { philippineDate } from "@/lib/philippine-date.mjs";
 export const visibility = z.enum(["public", "followers", "private"]);
 export const date = z
@@ -46,7 +47,16 @@ export const reviewSchema = z.object({
     "Reviews are for visits that have already happened.",
   ),
   ratings: z.record(z.string(), z.number().int().min(1).max(5)),
-  spending: z.number().int().min(0).max(100000).nullable().optional().default(null),
+  notApplicable: z.array(z.string().max(100)).max(5).default([]),
+  rewardOptIn: z.boolean().default(false),
+  spending: z
+    .number()
+    .int()
+    .min(0)
+    .max(100000)
+    .nullable()
+    .optional()
+    .default(null),
   visibility,
   incentive: z.boolean(),
   media: z.array(z.string().uuid()).max(4),
@@ -84,10 +94,7 @@ export const outingSchema = z.object({
 export function validCriteria(
   category: keyof typeof CRITERIA,
   ratings: Record<string, number>,
+  notApplicable: string[] = [],
 ) {
-  const expected = CRITERIA[category];
-  return (
-    expected.length === Object.keys(ratings).length &&
-    expected.every((k) => ratings[k] >= 1 && ratings[k] <= 5)
-  );
+  return criteriaVersion(category, ratings, notApplicable) > 0;
 }

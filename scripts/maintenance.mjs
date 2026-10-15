@@ -1,9 +1,13 @@
 import { DatabaseSync } from "node:sqlite";
 import { resolve } from "node:path";
 import { readdirSync, unlinkSync } from "node:fs";
+import { initializeCommerce, createCommerce } from "../src/lib/commerce-core.mjs";
 const dir = resolve(process.env.DATED_DATA_DIR || ".data");
 const db = new DatabaseSync(resolve(dir, "dated.sqlite"));
 const now = Date.now();
+initializeCommerce(db);
+const commerceResult = createCommerce(db).maintenance();
+console.log("Commerce maintenance:", commerceResult);
 const hasPosts = db
   .prepare("PRAGMA table_info(media)")
   .all()

@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "playwright test",
+    "test:commerce": "node --test tests/commerce.test.mjs tests/planning.test.mjs",
     "admin": "node scripts/admin.mjs",
     "places:sync": "node scripts/sync-places.mjs",
     "places:enrich": "node scripts/enrich-places.mjs",

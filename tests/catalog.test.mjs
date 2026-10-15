@@ -31,6 +31,7 @@ import {
   websiteLogo,
   websiteIdentityChanged,
 } from "../src/lib/public-resource.mjs";
+import { fetchOverpassData } from "../src/lib/overpass-source.mjs";
 
 mkdirSync(resolve("tmp"), { recursive: true });
 const directory = () => mkdtempSync(resolve("tmp", "catalog-test-"));
@@ -81,6 +82,47 @@ test("full-region refresh queries the Metro Manila area and its 17 known city bo
   assert.match(query, /amenity.*restaurant\|cafe\|fast_food\|food_court/);
   assert.equal((query.match(/relation\(\d+\);/g) || []).length, 18);
   assert.doesNotMatch(query, /rel\(area\.metro\)/);
+});
+test("temporary Overpass failures retry sequentially and operator endpoints stay authoritative", async () => {
+  const configuredEndpoint = process.env.DATED_OVERPASS_URL;
+  delete process.env.DATED_OVERPASS_URL;
+  try {
+    const calls = [],
+      warnings = [];
+    const result = await fetchOverpassData(metroOverpassQuery(), {
+      fetcher: async (url) => {
+        calls.push(new URL(url).hostname);
+        return calls.length === 1
+          ? { ok: false, status: 504 }
+          : { ok: true, json: async () => snapshot() };
+      },
+      validate: (data) => boundaries(data.elements),
+      progress: (event) => warnings.push(event.warning),
+    });
+    assert.deepEqual(calls, ["overpass-api.de", "overpass.private.coffee"]);
+    assert.equal(
+      result.endpoint,
+      "https://overpass.private.coffee/api/interpreter",
+    );
+    assert.ok(warnings[0].includes("retrying sequentially"));
+
+    process.env.DATED_OVERPASS_URL = "https://custom.example/api/interpreter";
+    const customCalls = [];
+    await assert.rejects(
+      fetchOverpassData(metroOverpassQuery(), {
+        fetcher: async (url) => {
+          customCalls.push(new URL(url).hostname);
+          return { ok: false, status: 503 };
+        },
+      }),
+      /HTTP 503/,
+    );
+    assert.deepEqual(customCalls, ["custom.example"]);
+  } finally {
+    if (configuredEndpoint === undefined)
+      delete process.env.DATED_OVERPASS_URL;
+    else process.env.DATED_OVERPASS_URL = configuredEndpoint;
+  }
 });
 test("full scan validates and assigns all 17 cities before importing, then respects weekly due dates", async () => {
   const db = database(),

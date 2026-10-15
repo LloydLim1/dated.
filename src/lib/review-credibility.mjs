@@ -47,3 +47,37 @@ export function reviewSummary(reviews, now = Date.now()) {
     ).size,
   };
 }
+
+/** Criterion counts use the same latest eligible review per person as the venue score. */
+export function criterionSummary(reviews) {
+  const latest = new Map();
+  for (const review of reviews
+    .filter(
+      (r) => r.visibility === "public" && !r.hidden && !r.demo && !r.incentive,
+    )
+    .sort(
+      (a, b) =>
+        b.visitDate.localeCompare(a.visitDate) ||
+        b.createdAt - a.createdAt ||
+        a.id.localeCompare(b.id),
+    )) {
+    if (!latest.has(review.authorId)) latest.set(review.authorId, review);
+  }
+  const aggregate = {};
+  for (const review of latest.values())
+    for (const [name, value] of Object.entries(review.ratings)) {
+      if (!Number.isFinite(value) || value < 1 || value > 5) continue;
+      // Only exactly equivalent historical dimensions are merged. Combined dimensions stay historical.
+      const aliases = { Value: "Value for money" };
+      const key = aliases[name] || name;
+      aggregate[key] ||= { sum: 0, count: 0 };
+      aggregate[key].sum += value;
+      aggregate[key].count++;
+    }
+  return Object.fromEntries(
+    Object.entries(aggregate).map(([name, value]) => [
+      name,
+      { average: value.sum / value.count, count: value.count },
+    ]),
+  );
+}

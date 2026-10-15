@@ -47,16 +47,35 @@ import {
   Pencil,
   Sparkles,
   Share2,
+  Wallet,
+  Store,
+  MoreHorizontal,
 } from "lucide-react";
 import Modal from "./modal";
 import PlaceCover from "./place-cover";
 import PlaceLogo from "./place-logo";
-import PremiumStudio from "./premium-studio";
+import StreetViewAction from "./street-view-action";
+import PlanningStudio from "./planning-studio";
+import {
+  WalletWorkspace,
+  BusinessWorkspace,
+  OperationsWorkspace,
+  AccountGate,
+} from "./commerce-workspaces";
 import PlaceSelect from "./place-select";
 import { PhotoCard, PhotoComposer, PhotoGrid } from "./photo-posts";
 import { philippineDate } from "@/lib/philippine-date.mjs";
+import { matchesDiscovery } from "@/lib/discovery-filters.mjs";
+import {
+  AdvancedFilterFields,
+  SponsoredPlaces,
+  VenueComparison,
+  defaultExtraFilters,
+  type ExtraFilters,
+} from "./discovery-extras";
 import {
   CRITERIA,
+  LEGACY_CRITERIA,
   METRO_CITIES,
   average,
   money,
@@ -104,6 +123,23 @@ const nav = [
   { id: "outings", name: "My outings", icon: CalendarDays },
   { id: "community", name: "Community", icon: Users },
 ];
+function trackDiscovery(placeId: string, kind: "place_open" | "directions") {
+  try {
+    let session = sessionStorage.getItem("dated-discovery-session");
+    if (!session) {
+      session = crypto.randomUUID();
+      sessionStorage.setItem("dated-discovery-session", session);
+    }
+    void fetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placeId, kind, session }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* Discovery remains available when browser storage is disabled. */
+  }
+}
 type ModalState = {
   type:
     | "auth"
@@ -115,6 +151,7 @@ type ModalState = {
     | "location"
     | "notifications"
     | "collection"
+    | "collection-share"
     | "save"
     | "profile"
     | "privacy"
@@ -123,7 +160,8 @@ type ModalState = {
     | "delete"
     | "moderation"
     | "person"
-    | "confirm";
+    | "confirm"
+    | "more";
   place?: Place;
   review?: Review;
   post?: PhotoPost;
@@ -209,6 +247,8 @@ export default function DatedApp({
   const [city, setCity] = useState("Metro Manila");
   const [budget, setBudget] = useState(0);
   const [occasion, setOccasion] = useState("Any occasion");
+  const [extraFilters, setExtraFilters] =
+    useState<ExtraFilters>(defaultExtraFilters);
   const [sort, setSort] = useState("For you");
   const [modal, setModalState] = useState<ModalState | null>(null);
   const [place, setPlace] = useState<Place | null>(null);
@@ -230,6 +270,43 @@ export default function DatedApp({
   const [outingTab, setOutingTab] = useState("Upcoming");
   const [premiumOuting, setPremiumOuting] = useState("");
   const placesRef = useRef<Place[]>([]);
+  const restoreDiscovery = useCallback(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("search") !== "1") return;
+    const number = (
+      key: string,
+      fallback: number,
+      min: number,
+      max: number,
+    ) => {
+      const raw = params.get(key);
+      const value = raw === null ? fallback : Number(raw);
+      return Number.isFinite(value)
+        ? Math.max(min, Math.min(max, value))
+        : fallback;
+    };
+    setQuery((params.get("q") || "").slice(0, 200));
+    setCategory(
+      categories.some((c) => c.name === params.get("category"))
+        ? params.get("category")!
+        : "All places",
+    );
+    setCity(
+      METRO_CITIES.includes(params.get("city") || "")
+        ? params.get("city")!
+        : "Metro Manila",
+    );
+    setBudget(number("budget", 0, 0, 100000));
+    setOccasion(params.get("occasion") || "Any occasion");
+    setExtraFilters({
+      minRating: number("minRating", 0, 0, 5),
+      criterion: (params.get("criterion") || "").slice(0, 100),
+      criterionMinimum: number("criterionMinimum", 0, 0, 5),
+      minReviews: number("minReviews", 1, 1, 1000),
+      groupSize: number("groupSize", 1, 1, 20),
+      budgetBasis: params.get("budgetBasis") === "total" ? "total" : "person",
+    });
+  }, []);
   const setModal = (value: ModalState | null) => {
     setModalError("");
     if (!value) setResume(null);
@@ -253,6 +330,7 @@ export default function DatedApp({
       .then((d) => {
         if (active) {
           setData(d);
+          restoreDiscovery();
           placesRef.current = d.places;
           const id = new URLSearchParams(location.search).get("place");
           setPlace(d.places.find((p) => p.id === id) || null);
@@ -268,6 +346,7 @@ export default function DatedApp({
     if ("serviceWorker" in navigator)
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     const onPop = () => {
+      restoreDiscovery();
       setView(location.pathname.slice(1) || "home");
       setModalState(null);
       setModalError("");
@@ -279,7 +358,7 @@ export default function DatedApp({
       active = false;
       window.removeEventListener("popstate", onPop);
     };
-  }, []);
+  }, [restoreDiscovery]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 4200);
@@ -335,6 +414,7 @@ export default function DatedApp({
   }
   const openPlace = useCallback((p: Place) => {
     setPlace(p);
+    trackDiscovery(p.id, "place_open");
     const url = new URL(location.href);
     url.searchParams.set("place", p.id);
     history.pushState({ datedPlace: true }, "", url.pathname + url.search);
@@ -354,6 +434,7 @@ export default function DatedApp({
     setCity("Metro Manila");
     setBudget(0);
     setOccasion("Any occasion");
+    setExtraFilters(defaultExtraFilters);
     setVisibleCount(6);
   };
   const hasFilters =
@@ -361,6 +442,10 @@ export default function DatedApp({
     category !== "All places" ||
     city !== "Metro Manila" ||
     !!budget ||
+    extraFilters.minRating > 0 ||
+    extraFilters.criterionMinimum > 0 ||
+    extraFilters.groupSize > 1 ||
+    extraFilters.budgetBasis === "total" ||
     occasion !== "Any occasion";
   const savedIds = new Set(data.collections.flatMap((c) => c.placeIds));
   const coverPhotos = useMemo(() => {
@@ -383,6 +468,15 @@ export default function DatedApp({
         (city === "Metro Manila" || city === "Near me" || p.city === city) &&
         (!budget || (p.budgetKnown !== false && p.budget <= budget)) &&
         (occasion === "Any occasion" || p.tags.includes(occasion)) &&
+        matchesDiscovery(p, {
+          ...extraFilters,
+          category,
+          city,
+          budget,
+          occasion,
+          query,
+          ...(coords ? { lat: coords.lat, lng: coords.lng } : {}),
+        }) &&
         `${p.name} ${p.city} ${p.neighborhood} ${p.category} ${p.tags.join(" ")}`
           .toLowerCase()
           .includes(query.toLowerCase()),
@@ -420,6 +514,7 @@ export default function DatedApp({
     query,
     sort,
     coords,
+    extraFilters,
   ]);
   const visiblePlaces =
     view === "saved"
@@ -534,6 +629,11 @@ export default function DatedApp({
       (outingTab === "Visited" ? o.completed : !o.completed),
   );
   const activeCollection = data.collections.find((c) => c.id === collection);
+  const selected = data.collections.find((c) => c.id === modal?.collection?.id);
+  const url =
+    selected?.shareToken && typeof location !== "undefined"
+      ? `${location.origin}/collection/${selected.shareToken}`
+      : "";
   const save = (p: Place) => {
     const next: ModalState = { type: "save", place: p };
     if (requireAccount(next)) setModal(next);
@@ -567,9 +667,21 @@ export default function DatedApp({
       "A different way to see the city.",
       "Find real restaurants, cafés and museums as you explore the map.",
     ],
-    premium: [
-      "A little more Dated.",
-      "Design a day worth sharing. Premium is free to preview.",
+    planning: [
+      "Make a day worth keeping.",
+      "Plan, collaborate, and share. Every planning tool is free.",
+    ],
+    wallet: [
+      "A little discovery. A little reward.",
+      "Your coins, your vouchers, your next good experience.",
+    ],
+    business: [
+      "A better experience starts with understanding.",
+      "Your location, your customers, and a clearer view of what matters.",
+    ],
+    operations: [
+      "Keep the community in good hands.",
+      "Thoughtful decisions. Clear records. Useful experiences.",
     ],
   };
   return (
@@ -616,12 +728,35 @@ export default function DatedApp({
         </nav>
         <div className="sidebar-label">A LITTLE MORE YOU</div>
         <button
-          className={"nav-item " + (view === "premium" ? "active" : "")}
-          onClick={() => go("premium")}
+          className={"nav-item " + (view === "planning" ? "active" : "")}
+          onClick={() => go("planning")}
         >
           <Sparkles size={20} />
-          Dated Premium
+          Planning studio
         </button>
+        <button
+          className={"nav-item " + (view === "wallet" ? "active" : "")}
+          onClick={() => go("wallet")}
+        >
+          <Wallet size={20} />
+          Coins & vouchers
+        </button>
+        <button
+          className={"nav-item " + (view === "business" ? "active" : "")}
+          onClick={() => go("business")}
+        >
+          <Store size={20} />
+          For locations
+        </button>
+        {data.me?.role === "admin" && (
+          <button
+            className={"nav-item " + (view === "operations" ? "active" : "")}
+            onClick={() => go("operations")}
+          >
+            <ShieldCheck size={20} />
+            Operations
+          </button>
+        )}
         <button
           className={"nav-item " + (view === "profile" ? "active" : "")}
           onClick={() =>
@@ -856,6 +991,26 @@ export default function DatedApp({
                 <>
                   {["home", "explore", "map", "saved"].includes(view) && (
                     <>
+                      {["home", "explore", "map"].includes(view) && (
+                        <SponsoredPlaces
+                          filters={{
+                            ...extraFilters,
+                            category,
+                            city,
+                            budget,
+                            occasion,
+                            query,
+                            ...(coords
+                              ? { lat: coords.lat, lng: coords.lng }
+                              : {}),
+                          }}
+                          onOpen={openPlace}
+                          me={data.me}
+                        />
+                      )}
+                      {view === "explore" && (
+                        <VenueComparison places={data.places} />
+                      )}
                       <div className="section-heading">
                         <h2>
                           {view === "home"
@@ -935,6 +1090,45 @@ export default function DatedApp({
                           )}
                         </button>
                       </div>
+                      {(view === "explore" || view === "map") && (
+                        <button
+                          className="text-button"
+                          onClick={async () => {
+                            const params = new URLSearchParams({
+                              search: "1",
+                              q: query,
+                              category,
+                              city: city === "Near me" ? "Metro Manila" : city,
+                              budget: String(budget),
+                              occasion,
+                              ...Object.fromEntries(
+                                Object.entries(extraFilters).map(([k, v]) => [
+                                  k,
+                                  String(v),
+                                ]),
+                              ),
+                            });
+                            const url = `${location.origin}/${view}?${params}`;
+                            history.replaceState(
+                              null,
+                              "",
+                              `/${view}?${params}`,
+                            );
+                            try {
+                              await navigator.clipboard.writeText(url);
+                              setToast(
+                                "Search link copied. Your device location is not included.",
+                              );
+                            } catch {
+                              setToast(
+                                "Your search is saved in the address bar. Copy its link to share.",
+                              );
+                            }
+                          }}
+                        >
+                          <Share2 size={14} /> Copy search link
+                        </button>
+                      )}
                       {hasFilters && (
                         <div
                           className="active-filters"
@@ -1009,9 +1203,22 @@ export default function DatedApp({
                         <div className="collection-toolbar">
                           <p>
                             <Lock size={14} />
-                            Private collection ·{" "}
-                            {activeCollection.placeIds.length} saved places
+                            {activeCollection.shareToken
+                              ? "Link sharing on"
+                              : "Private collection"}{" "}
+                            · {activeCollection.placeIds.length} saved places
                           </p>
+                          <button
+                            className="text-button"
+                            onClick={() =>
+                              setModal({
+                                type: "collection-share",
+                                collection: activeCollection,
+                              })
+                            }
+                          >
+                            <Share2 size={15} /> Sharing
+                          </button>
                           <button
                             className="text-button"
                             onClick={() =>
@@ -1532,15 +1739,57 @@ export default function DatedApp({
                       </aside>
                     </div>
                   )}
-                  {view === "premium" && (
-                    <PremiumStudio
+                  {view === "planning" && (
+                    <PlanningStudio
                       outings={data.outings}
                       places={data.places}
                       me={data.me}
                       initialOuting={premiumOuting}
                       onPlan={() => writeOuting()}
+                      onRefresh={refresh}
                     />
                   )}
+                  {view === "wallet" &&
+                    (data.me ? (
+                      <WalletWorkspace
+                        onDiscover={() => go("explore")}
+                        onReview={() => startReview()}
+                      />
+                    ) : (
+                      <AccountGate
+                        onSignIn={() => requireAccount(undefined, "wallet")}
+                      />
+                    ))}
+                  {view === "business" &&
+                    (data.me ? (
+                      <BusinessWorkspace
+                        places={data.places}
+                        me={data.me}
+                        onChange={refresh}
+                      />
+                    ) : (
+                      <AccountGate
+                        kind="business"
+                        onSignIn={() => requireAccount(undefined, "business")}
+                      />
+                    ))}
+                  {view === "operations" &&
+                    (data.me?.role === "admin" ? (
+                      <>
+                        <OperationsWorkspace />
+                        <button
+                          className="button secondary"
+                          onClick={() => setModal({ type: "moderation" })}
+                        >
+                          Review moderation and private evidence
+                        </button>
+                      </>
+                    ) : (
+                      <p className="form-error">
+                        This workspace is available to authorized
+                        administrators.
+                      </p>
+                    ))}
                   {view === "outings" && (
                     <>
                       <div className="journal-banner">
@@ -1687,7 +1936,7 @@ export default function DatedApp({
                                       className="text-button"
                                       onClick={() => {
                                         setPremiumOuting(o.id);
-                                        go("premium");
+                                        go("planning");
                                       }}
                                     >
                                       <Share2 size={16} />
@@ -1707,7 +1956,7 @@ export default function DatedApp({
                                       disabled={
                                         pending ||
                                         (!o.completed &&
-                                        o.date > philippineDate())
+                                          o.date > philippineDate())
                                       }
                                       title={
                                         !o.completed &&
@@ -1841,10 +2090,10 @@ export default function DatedApp({
                           <h2>My experience journal</h2>
                           <button
                             className="button secondary"
-                            onClick={() => go("premium")}
+                            onClick={() => go("planning")}
                           >
                             <Sparkles size={16} />
-                            Dated Premium
+                            Planning studio
                           </button>
                           <button
                             className="button"
@@ -2030,7 +2279,9 @@ export default function DatedApp({
                   visitors.
                 </p>
                 <div>
-                  <button onClick={() => go("premium")}>Dated Premium</button>
+                  <button onClick={() => go("planning")}>
+                    Planning studio
+                  </button>
                   <button onClick={() => setModal({ type: "privacy" })}>
                     Privacy & trust
                   </button>
@@ -2063,13 +2314,21 @@ export default function DatedApp({
           </button>
         ))}
         <button
-          className={view === "profile" ? "active" : ""}
-          onClick={() =>
-            data.me ? go("profile") : requireAccount(undefined, "profile")
+          className={
+            [
+              "profile",
+              "wallet",
+              "planning",
+              "business",
+              "operations",
+            ].includes(view)
+              ? "active"
+              : ""
           }
+          onClick={() => setModal({ type: "more" })}
         >
-          <Users size={21} />
-          <span>Me</span>
+          <MoreHorizontal size={21} />
+          <span>More</span>
         </button>
       </nav>
       {toast && (
@@ -2158,6 +2417,36 @@ export default function DatedApp({
               }}
             />
           )}
+          {modal.type === "more" && (
+            <nav className="workspace-menu" aria-label="Your DATED workspaces">
+              {[
+                { id: "profile", label: "My journal", icon: BookOpen },
+                { id: "wallet", label: "Coins & vouchers", icon: Wallet },
+                {
+                  id: "planning",
+                  label: "Planning studio",
+                  icon: CalendarDays,
+                },
+                { id: "business", label: "For locations", icon: Store },
+                { id: "map", label: "Map discovery", icon: MapIcon },
+                ...(data.me?.role === "admin"
+                  ? [
+                      {
+                        id: "operations",
+                        label: "Operations",
+                        icon: ShieldCheck,
+                      },
+                    ]
+                  : []),
+              ].map((item) => (
+                <button key={item.id} onClick={() => go(item.id)}>
+                  <item.icon size={21} />
+                  <span>{item.label}</span>
+                  <ChevronRight size={17} />
+                </button>
+              ))}
+            </nav>
+          )}
           {modal.type === "review" && (
             <ReviewForm
               places={data.places}
@@ -2242,6 +2531,9 @@ export default function DatedApp({
             <FilterForm
               budget={budget}
               occasion={occasion}
+              extraFilters={extraFilters}
+              category={category}
+              onExtraChange={setExtraFilters}
               onApply={(nextBudget, nextOccasion) => {
                 setBudget(nextBudget);
                 setOccasion(nextOccasion);
@@ -2336,6 +2628,80 @@ export default function DatedApp({
                 );
               }}
             />
+          )}
+          {modal.type === "collection-share" && selected && (
+            <div className="form-stack">
+              <p>
+                Share a snapshot of “{selected.name}” containing its name and
+                saved places. Anyone with the link can open it. Your reviews,
+                notes, and profile stay private.
+              </p>
+              {url && (
+                <>
+                  <label>
+                    Shared collection link
+                    <input
+                      readOnly
+                      value={url}
+                      onFocus={(e) => e.target.select()}
+                    />
+                  </label>
+                  <button
+                    className="button secondary"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(url);
+                        setToast("Collection link copied.");
+                      } catch {
+                        setModalError("Select and copy the link above.");
+                      }
+                    }}
+                  >
+                    <Share2 size={16} /> Copy link
+                  </button>
+                  <button
+                    className="text-button"
+                    disabled={pending}
+                    onClick={async () => {
+                      if (
+                        await action(
+                          `collections/${selected.id}/share`,
+                          {},
+                          "Sharing turned off.",
+                          "DELETE",
+                        )
+                      )
+                        setModal(null);
+                    }}
+                  >
+                    Turn off sharing
+                  </button>
+                </>
+              )}
+              <button
+                className="button"
+                disabled={pending}
+                onClick={() =>
+                  action(
+                    `collections/${selected.id}/share`,
+                    {},
+                    "Collection snapshot shared. Copy its link above.",
+                  )
+                }
+              >
+                {pending
+                  ? "Saving…"
+                  : url
+                    ? "Update snapshot & replace link"
+                    : "Create shared link"}
+              </button>
+              {url && (
+                <small>
+                  Replacing the link disables the previous link. Edits to saved
+                  places are shared only when you update this snapshot.
+                </small>
+              )}
+            </div>
           )}
           {modal.type === "collection" && (
             <SimpleForm
@@ -2631,6 +2997,7 @@ function modalTitle(m: ModalState) {
       location: "Where shall we explore?",
       notifications: "Your invitations",
       collection: "A collection of good places",
+      "collection-share": "Share your collection",
       confirm: "A moment before you delete",
       save: "Save for a little later",
       profile: "Make it a little more you",
@@ -2642,6 +3009,7 @@ function modalTitle(m: ModalState) {
       delete: "Say goodbye to your account",
       moderation: "Moderation workspace",
       person: "Meet a fellow explorer",
+      more: "Your DATED",
     } as Record<string, string>
   )[m.type];
 }
@@ -2655,25 +3023,33 @@ function formatDate(date: string) {
 function FilterForm({
   budget,
   occasion,
+  extraFilters,
+  category,
+  onExtraChange,
   onApply,
 }: {
   budget: number;
   occasion: string;
+  extraFilters: ExtraFilters;
+  category: string;
+  onExtraChange: (value: ExtraFilters) => void;
   onApply: (budget: number, occasion: string) => void;
 }) {
   const [draftBudget, setDraftBudget] = useState(budget);
   const [draftOccasion, setDraftOccasion] = useState(occasion);
+  const [draftExtra, setDraftExtra] = useState(extraFilters);
   return (
     <form
       className="form-stack"
       onSubmit={(e) => {
         e.preventDefault();
+        onExtraChange(draftExtra);
         onApply(draftBudget, draftOccasion);
       }}
     >
       <p className="form-intro">Find a place that fits your day.</p>
       <label>
-        Budget per person
+        Maximum budget
         <select
           value={draftBudget}
           onChange={(e) => setDraftBudget(Number(e.target.value))}
@@ -2712,12 +3088,18 @@ function FilterForm({
           onClick={() => {
             setDraftBudget(0);
             setDraftOccasion("Any occasion");
+            setDraftExtra(defaultExtraFilters);
           }}
         >
           Reset filters
         </button>
         <button className="button">Show matching places</button>
       </div>
+      <AdvancedFilterFields
+        value={draftExtra}
+        onChange={setDraftExtra}
+        category={category}
+      />
     </form>
   );
 }
@@ -2902,6 +3284,14 @@ function ReviewCard({
         </div>
       )}
       <div className="review-badges">
+        {r.businessRelationship && (
+          <span>
+            Author affiliated with this location · excluded from place score
+          </span>
+        )}
+        {r.rewardStatus === "approved" && (
+          <span>DATED coins awarded · rating remains independent</span>
+        )}
         {r.supported && (
           <span title="Visit evidence was assessed. This does not verify the opinion.">
             <ShieldCheck size={14} />
@@ -3032,7 +3422,11 @@ function PlaceDetail({
         reviewFilter === "all" ||
         (reviewFilter === "supported"
           ? r.supported
-          : !r.incentive && !r.demo && !r.hidden && r.visibility === "public"),
+          : !r.incentive &&
+            !r.businessRelationship &&
+            !r.demo &&
+            !r.hidden &&
+            r.visibility === "public"),
     )
     .sort(
       (a, b) =>
@@ -3268,6 +3662,18 @@ function PlaceDetail({
             <CalendarDays size={17} />
             Add to an outing
           </button>
+          {p.lat != null && p.lng != null && (
+            <a
+              className="button secondary"
+              target="_blank"
+              rel="noopener noreferrer"
+              href={`https://www.openstreetmap.org/directions?to=${p.lat}%2C${p.lng}`}
+              onClick={() => trackDiscovery(p.id, "directions")}
+            >
+              <Navigation size={17} /> Get directions
+            </a>
+          )}
+          <StreetViewAction place={p} />
         </div>
         {p.mapStatus === "unconfirmed" && (
           <p className="notice" role="status">
@@ -3414,6 +3820,12 @@ function PlaceDetail({
               {r.incentive && (
                 <p className="notice">
                   Incentivized visit · excluded from place score
+                </p>
+              )}
+              {r.rewardStatus === "approved" && (
+                <p className="notice">
+                  DATED coins awarded for this contribution. The reward does not
+                  depend on the rating.
                 </p>
               )}
               {r.author.id === me?.id ? (
@@ -3683,6 +4095,13 @@ function ReviewForm({
   const [ratings, setRatings] = useState<Record<string, number>>(
     review?.ratings || {},
   );
+  const [notApplicable, setNotApplicable] = useState<string[]>(
+    review?.notApplicable || [],
+  );
+  const criterionNames =
+    review?.criteriaVersion === 1
+      ? LEGACY_CRITERIA[p.category]
+      : CRITERIA[p.category];
   const [visibility, setVisibility] = useState<Visibility>(
     review?.visibility || "public",
   );
@@ -3716,8 +4135,15 @@ function ReviewForm({
       onSubmit={async (e) => {
         e.preventDefault();
         setError("");
-        if (CRITERIA[p.category].some((k) => !ratings[k])) {
-          setError("Rate every category before sharing.");
+        if (
+          criterionNames.some(
+            (k) => !ratings[k] && !notApplicable.includes(k),
+          ) ||
+          !Object.keys(ratings).length
+        ) {
+          setError(
+            "Score each criterion or select Not applicable. Add at least one score.",
+          );
           return;
         }
         const f = new FormData(e.currentTarget);
@@ -3732,6 +4158,8 @@ function ReviewForm({
               ? null
               : Number(f.get("spending")),
           ratings,
+          notApplicable,
+          rewardOptIn: f.get("rewardOptIn") === "on",
           visibility,
           incentive: f.get("incentive") === "on",
           media,
@@ -3751,6 +4179,7 @@ function ReviewForm({
           onChange={(id) => {
             setPlaceId(id);
             setRatings({});
+            setNotApplicable([]);
           }}
           label="Where did you go?"
         />
@@ -3759,11 +4188,7 @@ function ReviewForm({
           <input
             name="date"
             type="date"
-            defaultValue={
-              review?.visitDate ||
-              initialDate ||
-              philippineDate()
-            }
+            defaultValue={review?.visitDate || initialDate || philippineDate()}
             max={philippineDate()}
             required
           />
@@ -3771,18 +4196,58 @@ function ReviewForm({
       </div>
       <fieldset className="ratings-fieldset">
         <legend>How did it feel?</legend>
-        {CRITERIA[p.category].map((k) => (
+        {criterionNames.map((k) => (
           <div className="rating-row" key={k}>
             <span>{k}</span>
-            <div className="rating-stars" role="group" aria-label={k}>
+            <div className="rating-stars" role="radiogroup" aria-label={k}>
               {[1, 2, 3, 4, 5].map((n) => (
                 <button
                   key={n}
                   type="button"
                   className={(ratings[k] || 0) >= n ? "rated" : ""}
-                  onClick={() => setRatings((s) => ({ ...s, [k]: n }))}
+                  onClick={() => {
+                    setRatings((s) => ({ ...s, [k]: n }));
+                    setNotApplicable((values) =>
+                      values.filter((value) => value !== k),
+                    );
+                  }}
                   aria-label={k + " " + n + " star" + (n > 1 ? "s" : "")}
-                  aria-pressed={ratings[k] === n}
+                  role="radio"
+                  aria-checked={ratings[k] === n}
+                  tabIndex={
+                    ratings[k] === n || (!ratings[k] && n === 1) ? 0 : -1
+                  }
+                  onKeyDown={(e) => {
+                    if (
+                      [
+                        "ArrowRight",
+                        "ArrowLeft",
+                        "ArrowUp",
+                        "ArrowDown",
+                      ].includes(e.key)
+                    ) {
+                      e.preventDefault();
+                      const next = Math.max(
+                        1,
+                        Math.min(
+                          5,
+                          n +
+                            (["ArrowRight", "ArrowUp"].includes(e.key)
+                              ? 1
+                              : -1),
+                        ),
+                      );
+                      setRatings((values) => ({ ...values, [k]: next }));
+                      setNotApplicable((values) =>
+                        values.filter((value) => value !== k),
+                      );
+                      const buttons =
+                        e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+                          '[role="radio"]',
+                        );
+                      buttons?.[next - 1]?.focus();
+                    }
+                  }}
                   data-form-change
                 >
                   <Star
@@ -3792,6 +4257,27 @@ function ReviewForm({
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              className={
+                "rating-na " + (notApplicable.includes(k) ? "selected" : "")
+              }
+              aria-pressed={notApplicable.includes(k)}
+              onClick={() => {
+                setRatings((values) => {
+                  const next = { ...values };
+                  delete next[k];
+                  return next;
+                });
+                setNotApplicable((values) =>
+                  values.includes(k)
+                    ? values.filter((value) => value !== k)
+                    : [...values, k],
+                );
+              }}
+            >
+              Not applicable
+            </button>
           </div>
         ))}
       </fieldset>
@@ -3922,7 +4408,26 @@ function ReviewForm({
           type="checkbox"
           defaultChecked={review?.incentive}
         />
-        This visit was complimentary or incentivized.
+        This visit included a merchant gift, complimentary visit, or other
+        business incentive.
+      </label>
+      <label className="check-label reward-opt-in">
+        <input
+          name="rewardOptIn"
+          type="checkbox"
+          defaultChecked={!p.sample && (review?.rewardOptIn ?? true)}
+          disabled={p.sample}
+        />
+        <span>
+          {p.sample
+            ? "Sample locations do not earn coins."
+            : "Earn coins for an eligible contribution."}
+          <small>
+            Public independent reviews with three scored criteria and at least
+            40 characters can earn coins. Positive and negative reviews follow
+            the same rules. Photos and evidence are optional.
+          </small>
+        </span>
       </label>
       {error && (
         <p className="form-error" role="alert">
@@ -4445,11 +4950,11 @@ function TrustContent() {
       <h3>Your stories, your audience</h3>
       <p>
         Choose public, followers-only, or private for each photo post, review
-        and outing. Saved collections are private. Your email, password, and
-        device coordinates never appear in public content. Location permission
-        is optional; city search always works. Near me sends an approximate
-        search area to the map provider. Uploaded photos have location metadata
-        removed.
+        and outing. Saved collections are private until you explicitly share a
+        snapshot. Your email, password, and device coordinates never appear in
+        public content. Location permission is optional; city search always
+        works. Near me sends an approximate search area to the map provider.
+        Uploaded photos have location metadata removed.
       </p>
       <h3>Consent comes before company</h3>
       <p>
@@ -4531,11 +5036,14 @@ function TermsContent() {
       <h3>Pilot limitations</h3>
       <p>
         The pilot is provided for evaluation. Venue information, map locations,
-        and community coverage can be incomplete. No payment service,
-        reservations, or paid Premium subscription is active. The Premium
-        itinerary designer is available as a free preview. Share links expose
-        the chosen itinerary to anyone with the link until the host turns it
-        off.
+        and community coverage can be incomplete. All customer features are
+        free. Location subscriptions use invoices with payment confirmed by an
+        administrator; online payment and email recovery are not connected.
+        Coins reward eligible independent reviews regardless of sentiment and
+        have no cash value. Voucher availability, expiry, and partner terms
+        apply. Sponsored locations are labeled and must match your filters.
+        Share links expose the chosen itinerary to anyone with the link until
+        the host turns it off.
       </p>
     </div>
   );

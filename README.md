@@ -1,6 +1,6 @@
 # Dated
 
-A working, mobile-first local pilot for discovering places, saving collections, sharing structured reviews, and keeping multi-stop outings together.
+A working, mobile-first local platform for discovering places, structured reviews, customer rewards and vouchers, shared outings, and subscribed business reports and relevant advertising. All customer features are free.
 
 ## Run
 
@@ -16,6 +16,7 @@ Open **http://127.0.0.1:3000**. Create an account using Join Dated; no preconfig
 ```powershell
 npm run typecheck
 npm run lint
+npm run test:commerce
 npm test
 npm run build
 npm start
@@ -36,7 +37,14 @@ Tests use a separate `.data-test` database and Chrome. They do not touch pilot a
 - Following, a chronological Following feed, helpful votes, comments, contributor profiles, reports, and appeals.
 - Multi-stop outings with reordering, optional invitations, participant acceptance, per-person consent visibility, withdrawal, and a visited journal state. Participants can review individual stops.
 - Editable outing plans, adding a place to an existing plan, estimated itinerary spending, Upcoming/Visited views, invitation previews, and protection for unfinished forms.
-- Dated Premium is a free preview: customize an itinerary title/introduction, stop order, times, durations, notes and optional planned budgets. Choose timeline/compact layouts and forest/rose/slate palettes, save a private design, publish a revocable snapshot link, copy the plan, print/save a PDF, or download timed stops as a calendar file. Private outing notes and companion details are excluded from shared copies.
+- The free Planning studio lets customers customize itinerary titles, stop order, times, durations, notes and planned budgets; choose layouts and palettes; save private designs; share revocable snapshots; print/save a PDF; and export calendar files. Legacy `/premium` links redirect to `/planning`.
+- Automatic budget-aware outings, collaborative suggestions and votes, host adoption of suggested stops, category budgets, exact-centavo expense splits and settlement suggestions.
+- Private journal insights by year, spending and category breakdowns, scrapbook views, Markdown/JSON exports, and explicitly shared collection snapshots with revocable links.
+- Five predefined criteria per supported category, optional not-applicable choices, compatible historical ratings, criterion filters, venue comparisons and restorable search links.
+- Customer coin wallets, independent review rewards, appeals, partner-funded voucher offers, atomic stock/coin claims, private codes and one-time staff redemption. Reward amount never depends on a positive rating.
+- Verified business workspaces, branch-scoped roles, owner-provided details, manual subscription invoices, period-end cancellation, performance reports and exports, offers, campaigns and operations queues.
+- Clearly labeled sponsored placements match the same filters as organic results. Reports separate sponsored impressions/clicks from venue opens, saves and directions; monthly snapshots are archived by the local worker.
+- Google Street View links for known pins and the current map area. An optional restricted Maps Embed API key enables an in-app panorama; without it the action opens Google Maps. Imagery availability varies.
 - Private visit evidence, explicit moderator assessment, moderation decisions, and an audit history.
 - Account JSON export and password-confirmed account deletion.
 - Responsive navigation, keyboard-accessible native dialogs, reduced motion, install metadata, and a safe offline fallback. Private API responses are never stored in a service-worker cache.
@@ -79,7 +87,9 @@ The running implementation uses **Next.js + a persistent SQLite/filesystem store
 
 Supabase Auth, PostgreSQL/PostGIS, Storage, and Vercel are not connected. See [production plan](docs/production-plan.md) for the remaining infrastructure work and [architecture](docs/architecture.md) for the trust boundaries. Setting Supabase variables alone will not migrate the app.
 
-Still needed before public launch: real branch-specific venue data, cloud repository/auth/storage implementation, verified email and recovery, stronger age assurance, a licensed production map service, media moderation/scanning, privacy/operator contact details, load testing, operational monitoring, abuse monitoring, a privacy impact assessment, and a hosted pilot. Premium remains a free preview with no active payment or subscription service. Localhost share links work on this device; sharing with friends on other devices requires a deployed app.
+Still needed before public launch: cloud repository/auth/storage implementation, verified email and recovery, stronger age assurance, production provider arrangements, media moderation/scanning, privacy/operator contact details, load testing, operational monitoring, abuse monitoring, a privacy impact assessment, and hosting. Business billing currently requires an administrator to verify an actual manual payment reference; no online charge is simulated. Localhost share links work on this device; sharing with friends on other devices requires hosting.
+
+See [revised platform implementation and operator walkthrough](docs/revised-platform-implementation.md) for the new journeys, configurable local defaults, test evidence and external integration boundaries.
 
 See [verification](docs/verification.md) and [asset provenance](docs/assets.md).
 
@@ -87,7 +97,7 @@ See [frontend journeys](docs/user-journeys.md) for the complete screen flow map.
 
 ## Metro Manila directory and weekly updates
 
-Run the full restaurant, café, museum and cinema import with `npm run places:sync`. `-- --force` refreshes immediately; `-- --audit` shows the saved coverage report. It scans the mapped NCR boundary and validates all 17 city/municipality boundaries before importing named restaurants, cafés, fast-food outlets, food courts, museums and cinemas. This is public directory coverage, not an exhaustive census of every business. IDs remain stable and user ratings, photos, and saved places survive imports. Incomplete provider responses are rejected. `npm run places:enrich -- --force` rechecks verified logos and Philippine menus/prices using the saved directory when a fresh map scan is unavailable. `npm run museums:sync` refreshes only museums; `-- --audit` shows its source coverage.
+Run the full restaurant, café, museum and cinema import with `npm run places:sync`. `-- --force` refreshes immediately; `-- --audit` shows the saved coverage report. It scans the mapped NCR boundary and validates all 17 city/municipality boundaries before importing named restaurants, cafés, fast-food outlets, food courts, museums and cinemas. If a public Overpass instance returns a temporary server failure, the scan retries sequentially against other globally covering instances. Set `DATED_OVERPASS_URL` to use an operator-managed endpoint; that explicit setting remains authoritative. This is public directory coverage, not an exhaustive census of every business. IDs remain stable and user ratings, photos, and saved places survive imports. Incomplete provider responses are rejected. `npm run places:enrich -- --force` rechecks verified logos and Philippine menus/prices using the saved directory when a fresh map scan is unavailable. `npm run museums:sync` refreshes only museums; `-- --audit` shows its source coverage.
 
 The current local catalog contains 11,865 mapped food places, with verified cached logos on 3,548 listings and confirmed Philippine menu sources on 1,339. Of those menus, 1,285 were reachable, 53 unavailable and one restricted during source checking; unavailable menus are hidden and retained for the next check. Explicit published peso prices appear on 92 listings. Pickup Coffee's verified Philippine menu publishes item data used to show a sourced range; Hap Chan and Gerry's Philippine menu pages also expose named items with explicit peso prices. Those ranges are separate from estimated spending per person and can include sharing platters. ArmyNavy uses the exact ordering-menu link published by its Philippine homepage; other businesses on that platform are not automatically approved. Official Philippine operator pages now provide 318 verified logos across Max's Restaurant, Pancake House, Yellow Cab, Chooks to Go, Popeyes PH (35 mapped branches) and Chatime PH (23). The remaining 8,317 food listings still need authentic logo sources; their cards use full-width illustrative covers and show no invented initials or substitute marks. Unknown pricing is never interpreted as free. All listings still support ratings and journal photos, and review spending is optional. The cinema import adds 59 named mapped records, including individually mapped screens, with ticket/showtime details rather than food menus. Use `npm run cinemas:sync` to refresh cinemas separately.
 

@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { seedPeople, seedPlaces } from "@/lib/seed";
+import { initializeCommerce } from "@/lib/commerce-core.mjs";
 export const dataDir = resolve(
   /* turbopackIgnore: true */ process.env.DATED_DATA_DIR || ".data",
 );
@@ -21,6 +22,7 @@ db.exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;
  CREATE TABLE IF NOT EXISTS follows(follower TEXT REFERENCES users(id) ON DELETE CASCADE,following TEXT REFERENCES users(id) ON DELETE CASCADE,PRIMARY KEY(follower,following),CHECK(follower != following));
  CREATE TABLE IF NOT EXISTS collections(id TEXT PRIMARY KEY,owner_id TEXT REFERENCES users(id) ON DELETE CASCADE,name TEXT NOT NULL);
  CREATE TABLE IF NOT EXISTS collection_items(collection_id TEXT REFERENCES collections(id) ON DELETE CASCADE,place_id TEXT REFERENCES places(id),PRIMARY KEY(collection_id,place_id));
+ CREATE TABLE IF NOT EXISTS collection_shares(collection_id TEXT PRIMARY KEY REFERENCES collections(id) ON DELETE CASCADE,token TEXT NOT NULL,token_hash TEXT UNIQUE NOT NULL,snapshot TEXT NOT NULL,created_at INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS reactions(review_id TEXT REFERENCES reviews(id) ON DELETE CASCADE,user_id TEXT REFERENCES users(id) ON DELETE CASCADE,PRIMARY KEY(review_id,user_id));
  CREATE TABLE IF NOT EXISTS comments(id TEXT PRIMARY KEY,review_id TEXT REFERENCES reviews(id) ON DELETE CASCADE,author_id TEXT REFERENCES users(id) ON DELETE CASCADE,body TEXT NOT NULL,created_at INTEGER NOT NULL);
  CREATE TABLE IF NOT EXISTS outings(id TEXT PRIMARY KEY,owner_id TEXT REFERENCES users(id) ON DELETE CASCADE,title TEXT NOT NULL,date TEXT NOT NULL,visibility TEXT NOT NULL CHECK(visibility IN ('public','followers','private')),notes TEXT DEFAULT '',completed INTEGER DEFAULT 0,created_at INTEGER NOT NULL);
@@ -147,7 +149,10 @@ if (
   );
 }
 export type Row = Record<string, string | number | null>;
-db.exec("CREATE TABLE IF NOT EXISTS itinerary_designs(outing_id TEXT PRIMARY KEY REFERENCES outings(id) ON DELETE CASCADE,settings TEXT NOT NULL,token TEXT UNIQUE,published TEXT,updated_at INTEGER NOT NULL)");
+db.exec(
+  "CREATE TABLE IF NOT EXISTS itinerary_designs(outing_id TEXT PRIMARY KEY REFERENCES outings(id) ON DELETE CASCADE,settings TEXT NOT NULL,token TEXT UNIQUE,published TEXT,updated_at INTEGER NOT NULL)",
+);
+initializeCommerce(db);
 export function rows(sql: string, ...params: (string | number | null)[]) {
   return db.prepare(sql).all(...params) as Row[];
 }

@@ -25,6 +25,8 @@ Connect monitoring, an email provider, and structured product metrics. Establish
 
 Test search-to-view, view-to-save, review completion, outing completion, returning users, authorization, peak load, accessibility, real mobile networks, recovery, and incident handling using the curated dataset.
 
-## Deferred by design
+## Local implementation and remaining connections
 
-Premium subscriptions, payments, AI itinerary generation, expense splitting, voting, business dashboards, and native apps are intentionally deferred until MVP validation. No payment-success page or mock Premium entitlement grants access in the pilot.
+The revised local implementation includes free deterministic itinerary generation, expense splitting, voting, customer coins/vouchers, business workspaces, reports and relevant advertising. DATED Premium has been removed as a customer product. See [implementation status](revised-platform-implementation.md).
+
+Online subscription payments, verified email/recovery, hosted data/storage, production monitoring and native apps remain external work. Local business subscriptions activate only after an administrator records verification of a real manual payment reference. A browser redirect never grants a paid entitlement. No cloud projects were available; the user explicitly chose to continue the local implementation.

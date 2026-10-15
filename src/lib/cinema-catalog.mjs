@@ -1,5 +1,6 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { fetchOverpassData } from "./overpass-source.mjs";
 import {
   WEEK,
   boundaries,
@@ -83,21 +84,24 @@ export async function syncCinemas(
   });
   db.exec("COMMIT");
   try {
+    let sourceEndpoint;
     if (!source) {
-      const u = new URL(
-        process.env.DATED_OVERPASS_URL ||
-          "https://overpass-api.de/api/interpreter",
-      );
-      u.searchParams.set(
-        "data",
+      const result = await fetchOverpassData(
         '[out:json][timeout:60];area["ISO3166-2"="PH-00"]->.metro;nwr["amenity"="cinema"](area.metro);out center tags;rel(area.metro)["boundary"="administrative"]["admin_level"="6"];out geom;',
+        {
+          fetcher,
+          timeout: 90000,
+          progress,
+          userAgent: "Dated/1.0 (Metro Manila cinema updates)",
+          validate(data) {
+            if (!data.elements.some((e) => e.tags?.amenity === "cinema"))
+              throw new Error("Incomplete cinema map response.");
+            boundaries(data.elements);
+          },
+        },
       );
-      const response = await fetcher(u, {
-        signal: AbortSignal.timeout(90000),
-        headers: { "User-Agent": "Dated/1.0 (Metro Manila cinema updates)" },
-      });
-      if (!response.ok) throw Error("Cinema map source unavailable");
-      source = await response.json();
+      source = result.data;
+      sourceEndpoint = result.endpoint;
     }
     if (!Array.isArray(source.elements) || source.remark)
       throw Error("Incomplete cinema response");
@@ -146,6 +150,7 @@ export async function syncCinemas(
       lastAttempt: now,
       lastSuccess: now,
       nextDue: now + WEEK,
+      ...(sourceEndpoint ? { sourceEndpoint } : {}),
     };
     save(db, state);
     writeFileSync(

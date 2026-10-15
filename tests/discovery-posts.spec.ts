@@ -246,7 +246,8 @@ test("map to photo journal works on mobile with an accessible gallery", async ({
     .click();
   await expect(dialog).toContainText("Moments at Fixture Garden Kitchen");
   await page.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "Me", exact: true }).click();
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("navigation",{name:"Your DATED workspaces"}).getByRole("button",{name:"My journal",exact:true}).click();
   await page
     .getByRole("button", { name: "View photo post at Fixture Garden Kitchen" })
     .click();

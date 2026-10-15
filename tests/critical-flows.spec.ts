@@ -273,7 +273,7 @@ test("discovery, registration, save, and responsive browser journeys", async ({
     page.getByRole("heading", { name: "Little Sunday", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Filters", exact: true }).click();
-  await page.getByLabel("Budget per person").selectOption("400");
+  await page.getByLabel("Maximum budget").selectOption("400");
   await page.getByRole("button", { name: "Show matching places" }).click();
   await expect(
     page.getByRole("heading", { name: "Paper Cup Studio", exact: true }),
@@ -467,9 +467,9 @@ test("browser review and multi-stop outing journal", async ({ page }) => {
     .fill(
       "The coffee was lovely and the garden made a quiet afternoon feel special.",
     );
-  for (const criterion of ["Coffee & drinks", "Atmosphere", "Service", "Value"])
+  for (const criterion of ["Food & drinks", "Service", "Ambiance & comfort", "Cleanliness", "Value for money"])
     await dialog
-      .getByRole("button", { name: criterion + " 4 stars", exact: true })
+      .getByRole("radio", { name: criterion + " 4 stars", exact: true })
       .click();
   await dialog.getByLabel("Who can see this?").selectOption("private");
   await dialog.getByRole("button", { name: "Keep in my journal" }).click();
@@ -527,7 +527,7 @@ test("collection lifecycle, editable plans, deep links, and safe cancellation", 
   await account(page.request, "journeys");
   await page.goto("/explore");
   await page.getByRole("button", { name: "Filters", exact: true }).click();
-  await page.getByLabel("Budget per person").selectOption("400");
+  await page.getByLabel("Maximum budget").selectOption("400");
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("heading", { name: "Casa Luna", exact: true }),

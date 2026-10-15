@@ -1,5 +1,7 @@
 # Architecture and trust boundaries
 
+The revised local commerce, rewards, advertising, collection-sharing and planning domains are documented in [current implementation](revised-platform-implementation.md). The baseline below describes the original pilot; the current domain boundaries extend it without a cloud migration. Commercial writes run through `commerce-core.mjs`, category/filter definitions are shared with the server, and a persistent local worker handles rewards, expiry and monthly report snapshots.
+
 The app is a modular monolith: Next.js routes and React surfaces, shared types and validation, a server-only authentication layer, a read model, and a transactional local database. The SQLite store is an explicit local-pilot choice to make all primary journeys usable without external account provisioning.
 
 | Area | Implementation |

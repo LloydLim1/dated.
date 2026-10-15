@@ -19,29 +19,33 @@ import {
   type ItinerarySettings,
 } from "@/lib/itinerary";
 import { ItinerarySheet, ItineraryExports } from "./itinerary-document";
-export default function PremiumStudio({
+import PlanningTools from "./planning-tools";
+export default function PlanningStudio({
   outings,
   places,
   me,
   initialOuting,
   onPlan,
+  onRefresh,
 }: {
   outings: Outing[];
   places: Place[];
   me: User | null;
   initialOuting?: string;
   onPlan: () => void;
+  onRefresh: () => Promise<void>;
 }) {
   const own = outings.filter((o) => o.owner.id === me?.id);
   const [selection, setSelection] = useState(initialOuting || own[0]?.id || "");
   const selected = own.find((o) => o.id === selection) || own[0];
   return (
     <section className="premium-page">
+      <PlanningTools outings={outings} places={places} me={me} onCreated={async id=>{await onRefresh();setSelection(id);}}/>
       <div className="premium-intro">
         <div>
           <span className="premium-badge">
             <Sparkles size={14} />
-            Dated Premium · Free preview
+            Planning tools · Included for everyone
           </span>
           <h2>
             A good day.
@@ -110,10 +114,10 @@ export default function PremiumStudio({
           <p>
             {me
               ? "Create an outing, then choose how you want to share it."
-              : "Sign in and create an outing to try the itinerary designer. The Premium preview is free."}
+              : "Sign in and create an outing to use the free itinerary designer."}
           </p>
           <button className="button" onClick={onPlan}>
-            {me ? "Plan an outing" : "Sign in to try Premium"}
+            {me ? "Plan an outing" : "Sign in to start planning"}
           </button>
         </div>
       )}

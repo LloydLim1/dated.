@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Place } from "@/lib/types";
+import StreetViewAction from "./street-view-action";
 import { datedMapStyle } from "@/lib/map-theme";
 import {
   rankedMapPlaces,
@@ -95,6 +96,9 @@ export default function PlaceMap({
     [range, setRange] = useState(""),
     [panelOpen, setPanelOpen] = useState(true),
     [selectedId, setSelectedId] = useState("");
+  const [viewpoint, setViewpoint] = useState(
+    center || { lat: 14.557, lng: 121.024 },
+  );
   const selectedRef = useRef(""),
     panelRef = useRef(true);
   useEffect(() => {
@@ -126,6 +130,7 @@ export default function PlaceMap({
       setZoom(map.getZoom());
       const c = map.getCenter(),
         edge = map.unproject([width / 2, height]);
+      setViewpoint({ lat: c.lat, lng: c.lng });
       setRange(
         (c.distanceTo(edge) / 1000).toFixed(c.distanceTo(edge) < 1000 ? 1 : 0) +
           " km",
@@ -335,12 +340,15 @@ export default function PlaceMap({
       map.on("resize", redraw);
       const customStyle = process.env.NEXT_PUBLIC_MAP_STYLE_URL;
       const tokens = getComputedStyle(el.current);
-      map.setStyle(customStyle || "https://tiles.openfreemap.org/styles/positron", {
-        // An explicitly configured provider style keeps its own visual direction.
-        transformStyle: customStyle
-          ? undefined
-          : (_previous, next) => datedMapStyle(next, tokens),
-      });
+      map.setStyle(
+        customStyle || "https://tiles.openfreemap.org/styles/positron",
+        {
+          // An explicitly configured provider style keeps its own visual direction.
+          transformStyle: customStyle
+            ? undefined
+            : (_previous, next) => datedMapStyle(next, tokens),
+        },
+      );
     } catch {
       queueMicrotask(() => setFailed(true));
     }
@@ -532,6 +540,7 @@ export default function PlaceMap({
                     fill={savedIds.has(p.id) ? "currentColor" : "none"}
                   />
                 </button>
+                <StreetViewAction place={p} compact />
               </article>
             );
           })}
@@ -597,8 +606,11 @@ export default function PlaceMap({
             ? "City view"
             : zoom < 15
               ? "Neighborhood view"
-              : "Street view"}
+              : "Street level"}
         </span>
+      </div>
+      <div className="map-street-view-control">
+        <StreetViewAction place={{ ...viewpoint, name: "this map area" }} />
       </div>
       {error && (
         <div className="discovery-error" role="alert">
