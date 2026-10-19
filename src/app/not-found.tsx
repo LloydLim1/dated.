@@ -19,8 +19,8 @@ export default function NotFound() {
           <Compass size={18} />
           Explore places
         </Link>
-        <Link href="/" className="button secondary">
-          Back to For you
+        <Link href="/app" className="button secondary">
+          Open the app
         </Link>
       </div>
     </main>

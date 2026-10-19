@@ -11,7 +11,7 @@ npm ci
 npm run dev
 ```
 
-Open **http://127.0.0.1:3000**. Create an account using Join Dated; no preconfigured password or administrator account is shipped. Open a second browser profile to try companion invitations between two accounts.
+Open **http://127.0.0.1:3000** for the public landing page. Customers can open the mobile-first app at **/app** or start from Explore; business owners use **/business**, and authorized staff use **/operations**. Create an account using Join Dated; no preconfigured password or administrator account is shipped. Open a second browser profile to try companion invitations between two accounts.
 
 ```powershell
 npm run typecheck
@@ -90,6 +90,8 @@ Supabase Auth, PostgreSQL/PostGIS, Storage, and Vercel are not connected. See [p
 Still needed before public launch: cloud repository/auth/storage implementation, verified email and recovery, stronger age assurance, production provider arrangements, media moderation/scanning, privacy/operator contact details, load testing, operational monitoring, abuse monitoring, a privacy impact assessment, and hosting. Business billing currently requires an administrator to verify an actual manual payment reference; no online charge is simulated. Localhost share links work on this device; sharing with friends on other devices requires hosting.
 
 See [revised platform implementation and operator walkthrough](docs/revised-platform-implementation.md) for the new journeys, configurable local defaults, test evidence and external integration boundaries.
+
+See the [business model and implementation plan](docs/business-model-and-implementation-plan.md) for the B2C/B2B value exchange, trust rules, current pilot capabilities and remaining production phases.
 
 See [verification](docs/verification.md) and [asset provenance](docs/assets.md).
 

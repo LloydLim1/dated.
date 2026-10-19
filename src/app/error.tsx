@@ -17,8 +17,8 @@ export default function ErrorPage({ reset }: { reset: () => void }) {
         <button className="button" onClick={reset}>
           Try again
         </button>
-        <Link href="/" className="button secondary">
-          Back to For you
+        <Link href="/app" className="button secondary">
+          Open the app
         </Link>
       </div>
     </main>

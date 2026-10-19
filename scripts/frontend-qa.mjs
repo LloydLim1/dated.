@@ -74,10 +74,27 @@ try {
     await page.setViewportSize({ width, height });
     await page.goto("/");
     await page
+      .getByRole("heading", { name: /Find your kind of place/ })
+      .waitFor();
+    await scan(name + "-landing");
+    await page.goto("/app");
+    await page
       .getByRole("heading", { name: "Fern & Fable", exact: true })
       .waitFor();
     await scan(name + "-home");
   }
+  await page.goto("/explore?auth=signup");
+  await page.getByRole("dialog").waitFor();
+  await scan("customer-signup-entry");
+  await page.getByRole("button", { name: "Close dialog" }).click();
+  await page.goto("/business?auth=login");
+  await page.getByRole("dialog").waitFor();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Welcome back" })
+    .waitFor();
+  await scan("business-login-entry");
+  await page.getByRole("button", { name: "Close dialog" }).click();
   await page.goto("/explore");
   await page
     .getByRole("button", { name: "Explore Fern & Fable", exact: true })

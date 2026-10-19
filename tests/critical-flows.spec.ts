@@ -259,6 +259,10 @@ test("discovery, registration, save, and responsive browser journeys", async ({
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   await expect(
+    page.getByRole("heading", { name: /Find your kind of place/ }),
+  ).toBeVisible();
+  await page.goto("/app");
+  await expect(
     page.getByRole("heading", { name: "Go somewhere. Feel something." }),
   ).toBeVisible();
   await expect(
@@ -319,7 +323,7 @@ test("discovery, registration, save, and responsive browser journeys", async ({
     page.getByRole("heading", { name: "Paper Cup Studio", exact: true }),
   ).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/app");
   await expect(
     page.getByRole("heading", { name: "Go somewhere. Feel something." }),
   ).toBeVisible();
@@ -734,7 +738,7 @@ test("mobile invitation preview, acceptance, and withdrawal", async ({
     },
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/app");
   await page.getByRole("button", { name: /Notifications/ }).click();
   await expect(page.getByRole("dialog")).toContainText(
     "Meet at the garden table.",

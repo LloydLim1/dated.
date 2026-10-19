@@ -1,6 +1,6 @@
 # Frontend journeys
 
-The local pilot has six main destinations: For you, Explore (with map discovery), Saved places, My outings, Community, and My journal. Mobile navigation exposes all six destinations. Account actions use the same server-backed account on every screen.
+The public website opens on the landing page at `/`. Customers enter the mobile-first app at `/app` or go straight to Explore, while business owners use `/business` and authorized staff use `/operations`. The pilot has six main customer destinations: For you, Explore (with map discovery), Saved places, My outings, Community, and My journal. Mobile navigation exposes all six destinations. Account actions use the same server-backed account on every screen.
 
 | Journey | Entry and outcome | Recovery and privacy |
 | --- | --- | --- |

@@ -242,6 +242,7 @@ export default function DatedApp({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [view, setView] = useState(initialView);
+  const [authMode, setAuthMode] = useState<"signup" | "login">("signup");
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All places");
   const [city, setCity] = useState("Metro Manila");
@@ -332,6 +333,25 @@ export default function DatedApp({
           setData(d);
           restoreDiscovery();
           placesRef.current = d.places;
+          const url = new URL(location.href);
+          const requestedAuth = url.searchParams.get("auth");
+          if (
+            !d.me &&
+            (requestedAuth === "signup" || requestedAuth === "login")
+          ) {
+            setAuthMode(requestedAuth);
+            setResume(null);
+            setModalError("");
+            setModalState({ type: "auth" });
+          }
+          if (requestedAuth) {
+            url.searchParams.delete("auth");
+            history.replaceState(
+              history.state,
+              "",
+              url.pathname + url.search + url.hash,
+            );
+          }
           const id = new URLSearchParams(location.search).get("place");
           setPlace(d.places.find((p) => p.id === id) || null);
           setError("");
@@ -347,7 +367,11 @@ export default function DatedApp({
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     const onPop = () => {
       restoreDiscovery();
-      setView(location.pathname.slice(1) || "home");
+      setView(
+        location.pathname === "/app"
+          ? "home"
+          : location.pathname.slice(1) || "home",
+      );
       setModalState(null);
       setModalError("");
       const id = new URLSearchParams(location.search).get("place");
@@ -369,7 +393,7 @@ export default function DatedApp({
     setPlace(null);
     setModal(null);
     setVisibleCount(6);
-    history.pushState(null, "", next === "home" ? "/" : "/" + next);
+    history.pushState(null, "", next === "home" ? "/app" : "/" + next);
     window.scrollTo({ top: 0, behavior: "instant" });
     requestAnimationFrame(() =>
       document.getElementById("main")?.focus({ preventScroll: true }),
@@ -692,7 +716,7 @@ export default function DatedApp({
       <aside className="sidebar">
         <Link
           className="brand"
-          href="/"
+          href="/app"
           onClick={(e) => {
             e.preventDefault();
             go("home");
@@ -812,7 +836,7 @@ export default function DatedApp({
         <header className="topbar">
           <Link
             className="brand mobile-brand"
-            href="/"
+            href="/app"
             onClick={(e) => {
               e.preventDefault();
               go("home");
@@ -2407,6 +2431,7 @@ export default function DatedApp({
           )}
           {modal.type === "auth" && (
             <AuthForm
+              initialMode={authMode}
               onSuccess={async () => {
                 await refresh();
                 const next = resume;
@@ -3859,8 +3884,14 @@ function PlaceDetail({
     </div>
   );
 }
-function AuthForm({ onSuccess }: { onSuccess: () => Promise<void> }) {
-  const [mode, setMode] = useState("signup");
+function AuthForm({
+  initialMode = "signup",
+  onSuccess,
+}: {
+  initialMode?: "signup" | "login";
+  onSuccess: () => Promise<void>;
+}) {
+  const [mode, setMode] = useState(initialMode);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [legal, setLegal] = useState<"terms" | "privacy" | null>(null);
@@ -3884,7 +3915,7 @@ function AuthForm({ onSuccess }: { onSuccess: () => Promise<void> }) {
             className={mode === m ? "selected" : ""}
             key={m}
             onClick={() => {
-              setMode(m);
+              setMode(m as "signup" | "login");
               setError("");
             }}
           >

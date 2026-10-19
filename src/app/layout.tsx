@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./workspaces.css";
+import "./landing.css";
 export const metadata: Metadata = {
   title: "Dated — Places worth your time",
   description:

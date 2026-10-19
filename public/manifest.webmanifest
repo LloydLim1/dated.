@@ -2,7 +2,7 @@
   "name": "Dated — Places worth your time",
   "short_name": "Dated",
   "description": "Discover places and keep your outings together.",
-  "start_url": "/",
+  "start_url": "/app",
   "display": "standalone",
   "background_color": "#f8f9f5",
   "theme_color": "#214d3d",
