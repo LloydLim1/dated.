@@ -413,6 +413,12 @@ test("collection snapshots can be revoked; search links restore filters; Street 
   await expect(
     publicPage.getByRole("heading", { name: known.name }),
   ).toBeVisible();
+  // Opening the guest page can trigger a dev-only Fast Refresh on first use.
+  // Reopen the collection controls before revoking the published snapshot.
+  await page
+    .getByRole("button", { name: new RegExp("Quiet afternoons " + stamp) })
+    .click();
+  await page.getByRole("button", { name: "Sharing", exact: true }).click();
   await page
     .getByRole("button", { name: "Turn off sharing", exact: true })
     .click();
